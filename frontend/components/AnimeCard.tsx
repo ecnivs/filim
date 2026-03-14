@@ -26,6 +26,9 @@ export type AnimeCardProps = {
     widthClassName?: string;
 };
 
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/http";
+
 export function AnimeCard({
     anime,
     isInList,
@@ -34,9 +37,21 @@ export function AnimeCard({
     onSetRating,
     widthClassName = "w-[calc(92vw/2)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: AnimeCardProps) {
+    const queryClient = useQueryClient();
     const router = useRouter();
     const playHref = `/watch/${anime.id}/1`;
     const infoHref = `/anime/${anime.id}`;
+
+    const prefetchDetails = () => {
+        void queryClient.prefetchQuery({
+            queryKey: ["anime", anime.id],
+            queryFn: async () => {
+                const res = await api.get(`/catalog/${anime.id}`);
+                return res.data;
+            },
+            staleTime: 5 * 60 * 1000,
+        });
+    };
 
     const subtitle =
         typeof anime.episode_count === "number" && anime.episode_count > 0
@@ -53,6 +68,7 @@ export function AnimeCard({
         <div
             className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 group-hover/row-inner:opacity-30 hover:!opacity-100 hover:z-50 cursor-pointer select-none`}
             onClick={handleCardClick}
+            onMouseEnter={prefetchDetails}
         >
             <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out group-hover/card:scale-[1.25] group-hover/card:z-30 group-hover/card:delay-[100ms]">
                 {anime.poster_image_url && !imageFailed ? (

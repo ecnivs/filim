@@ -9,6 +9,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.cache import cache_response
 
 
 class AnimeSummaryModel(BaseModel):
@@ -108,6 +109,7 @@ class AllAnimeSourceAdapter:
             timeout=settings.http_timeout_seconds,
         )
 
+    @cache_response(ttl_seconds=3600)  # Cache search for 1 hour
     async def search_shows(
         self,
         query: str,
@@ -167,6 +169,7 @@ class AllAnimeSourceAdapter:
             )
         return results
 
+    @cache_response(ttl_seconds=1800)  # Cache popular for 30 mins
     async def get_popular_shows(
         self,
         limit: int = 20,
@@ -233,6 +236,7 @@ class AllAnimeSourceAdapter:
             )
         return results
 
+    @cache_response(ttl_seconds=3600)
     async def get_show_details(
         self,
         show_id: str,
@@ -294,6 +298,7 @@ class AllAnimeSourceAdapter:
             alt_names=list(show.get("altNames") or []),
         )
 
+    @cache_response(ttl_seconds=3600)
     async def get_episode_list(
         self,
         show_id: str,

@@ -5,6 +5,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.cache import cache_response
 from app.sources import AllAnimeSourceAdapter, StreamCandidateModel
 from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverError
 
@@ -22,6 +23,7 @@ class StreamService:
         self.source = source or AllAnimeSourceAdapter()
         self.resolver = StreamResolver()
 
+    @cache_response(ttl_seconds=1800)  # Cache manifests for 30 mins
     async def get_hls_manifest_for_episode(
         self,
         anime_id: str,

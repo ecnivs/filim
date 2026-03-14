@@ -5,7 +5,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProfileProvider } from "@/lib/profile-context";
 import { SplashLoader } from "./SplashLoader";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 5 * 60 * 1000, // 5 minutes
+            gcTime: 30 * 60 * 1000,   // 30 minutes
+            refetchOnWindowFocus: false, // Avoid redundant re-fetches
+            retry: 1
+        }
+    }
+});
 
 export function ClientProviders({ children }: { children: ReactNode }) {
     const [mounted, setMounted] = useState(false);
