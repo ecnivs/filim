@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { api } from "@/lib/http";
 import { Player } from "@/components/Player";
@@ -43,6 +43,7 @@ type AnimeDetails = {
 
 export default function WatchPage() {
     const params = useParams<{ animeId: string; episode: string }>();
+    const router = useRouter();
     const [error, setError] = useState<string | null>(null);
     const [manifestUrl, setManifestUrl] = useState<string | null>(null);
     const [variants, setVariants] = useState<StreamVariant[]>([]);
@@ -352,12 +353,10 @@ export default function WatchPage() {
     }, [routeIds]);
 
     const handleBack = useCallback(() => {
-        if (animeDetails?.id) {
-            window.location.href = `/title/${animeDetails.id}`;
-        } else {
-            history.back();
-        }
-    }, [animeDetails?.id]);
+        // Use Next.js router to navigate back, which guarantees the layout
+        // history (like intercepted modals over the home page) is preserved.
+        router.back();
+    }, [router]);
 
     return (
         <main className="h-screen w-screen overflow-hidden bg-black text-white">

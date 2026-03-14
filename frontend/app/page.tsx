@@ -272,7 +272,7 @@ export default function HomePage() {
                             </SectionRow>
                         )}
 
-                        {recommendations.data?.map((section) => (
+                        {recommendations.data?.filter(section => section.items.length > 0).map((section) => (
                             <SectionRow key={section.id} title={section.title}>
                                 {section.items.map((anime) => (
                                     <AnimeCard

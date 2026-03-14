@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { AnimeCard, type AnimeSummaryCard } from "./AnimeCard";
 import { useState } from "react";
 
@@ -43,6 +44,7 @@ interface AnimeDetailViewProps {
 
 export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewProps) {
     const queryClient = useQueryClient();
+    const router = useRouter();
 
     const {
         data,
@@ -75,6 +77,14 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
         queryKey: ["preferences"],
         queryFn: async () => {
             const res = await api.get<{ items: PreferenceItem[] }>("/user/preferences");
+            return res.data.items;
+        }
+    });
+
+    const continueWatching = useQuery({
+        queryKey: ["continue-watching"],
+        queryFn: async () => {
+            const res = await api.get<{ items: { anime_id: string; episode: string }[] }>("/user/continue-watching");
             return res.data.items;
         }
     });
@@ -154,6 +164,15 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
         return numA - numB;
     });
 
+    const resumeHref = (() => {
+        if (!data) return "#";
+        const progress = continueWatching.data?.find(item => item.anime_id === data.id);
+        if (progress && progress.episode) {
+            return `/watch/${data.id}/${progress.episode}`;
+        }
+        return `/watch/${data.id}/${sortedEpisodes[0]?.number || "1"}`;
+    })();
+
     return (
         <div className="w-full bg-background flex flex-col rounded-xl overflow-hidden">
             {/* Banner Section */}
@@ -175,7 +194,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                     </h1>
                     <div className="flex items-center gap-3">
                         <Link
-                            href={`/watch/${data.id}/${sortedEpisodes[0]?.number || "1"}`}
+                            href={resumeHref}
                             className="inline-flex items-center gap-2 rounded bg-ncyan px-8 py-2.5 text-base font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20"
                         >
                             <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
@@ -268,12 +287,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                             <select
                                 value={data.id}
                                 onChange={(e) => {
-                                    if (onClose) {
-                                        // If in modal, we might want to navigate or refresh
-                                        window.location.href = `/anime/${e.target.value}`;
-                                    } else {
-                                        window.location.href = `/anime/${e.target.value}`;
-                                    }
+                                    router.push(`/anime/${e.target.value}`, { scroll: false });
                                 }}
                                 className="bg-neutral-800 text-white text-sm font-bold py-2 px-4 rounded border border-neutral-600 outline-none"
                             >
@@ -289,7 +303,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                             <Link
                                 key={ep.number}
                                 href={`/watch/${data.id}/${ep.number}`}
-                                className="group flex flex-col sm:flex-row items-start sm:items-center gap-6 p-4 rounded-lg bg-neutral-900/50 hover:bg-neutral-800 transition-colors border-b border-neutral-800/50 last:border-0"
+                                className="group flex flex-col sm:flex-row items-start sm:items-center text-left gap-6 p-4 rounded-lg bg-neutral-900/50 hover:bg-neutral-800 transition-colors border-b border-neutral-800/50 last:border-0"
                             >
                                 <span className="text-2xl font-black text-neutral-600 w-8 text-center hidden sm:block">
                                     {idx + 1}

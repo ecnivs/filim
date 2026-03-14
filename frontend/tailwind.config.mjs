@@ -22,6 +22,33 @@ export default {
             },
             fontFamily: {
                 sans: ["Inter", "system-ui", "sans-serif"]
+            },
+            animation: {
+                "splash-logo": "splash-logo 2.5s cubic-bezier(0.25, 1, 0.5, 1) forwards"
+            },
+            keyframes: {
+                "splash-logo": {
+                    "0%": {
+                        transform: "scale(0.8) translate3d(0,0,0)",
+                        opacity: "0",
+                        filter: "blur(10px) brightness(1)"
+                    },
+                    "15%": {
+                        transform: "scale(1.02) translate3d(0,0,0)",
+                        opacity: "1",
+                        filter: "blur(0px) brightness(1)"
+                    },
+                    "75%": {
+                        transform: "scale(1.1) translate3d(0,0,0)",
+                        opacity: "1",
+                        filter: "blur(0px) brightness(1.2)"
+                    },
+                    "100%": {
+                        transform: "scale(2) translate3d(0,0,0)",
+                        opacity: "0",
+                        filter: "blur(15px) brightness(2)"
+                    }
+                }
             }
         }
     },

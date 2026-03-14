@@ -113,6 +113,7 @@ export function Player({
     const [volume, setVolume] = useState(1);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [controlsVisible, setControlsVisible] = useState(true);
+    const [isPlayerReady, setIsPlayerReady] = useState(false);
     const [isScrubbing, setIsScrubbing] = useState(false);
     const [scrubPercent, setScrubPercent] = useState(0);
     const [bufferedPercent, setBufferedPercent] = useState(0);
@@ -365,6 +366,10 @@ export function Player({
             onEndedRef.current?.();
         };
 
+        const handleCanPlay = () => {
+            setIsPlayerReady(true);
+        };
+
         video.addEventListener("loadedmetadata", handleLoadedMetadata);
         video.addEventListener("timeupdate", handleTimeUpdate);
         video.addEventListener("playing", handlePlaying);
@@ -372,6 +377,7 @@ export function Player({
         video.addEventListener("waiting", handleWaiting);
         video.addEventListener("progress", handleProgress);
         video.addEventListener("ended", handleEnded);
+        video.addEventListener("canplay", handleCanPlay);
 
         // Try to autoplay; if blocked, leave paused state
         void video
@@ -389,6 +395,7 @@ export function Player({
             video.removeEventListener("waiting", handleWaiting);
             video.removeEventListener("progress", handleProgress);
             video.removeEventListener("ended", handleEnded);
+            video.removeEventListener("canplay", handleCanPlay);
             if (hlsRef.current) {
                 hlsRef.current.destroy();
                 hlsRef.current = null;
@@ -465,7 +472,7 @@ export function Player({
 
     // Auto-hide controls and cursor when playing
     useEffect(() => {
-        if (!isPlaying) {
+        if (!isPlaying || isBuffering) {
             setControlsVisible(true);
             if (containerRef.current) {
                 containerRef.current.style.cursor = "default";
@@ -869,14 +876,18 @@ export function Player({
 
             {/* Center play/pause indicator */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                {!isPlaying && !isBuffering && (
-                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition-transform hover:scale-110">
-                        <Play className="h-10 w-10 text-white fill-white ml-1" />
+                {!isPlaying && !isBuffering && isPlayerReady && (
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                        <Play className="h-10 w-10 text-white fill-white ml-2 drop-shadow-lg" />
                     </div>
                 )}
-                {isBuffering && isPlaying && (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full border-[3px] border-white/20 border-t-white animate-spin">
-                        <span className="sr-only">Buffering</span>
+                {(isBuffering || (!isPlayerReady && !hasEnded)) && (
+                    <div className="flex h-24 w-24 items-center justify-center">
+                        <svg className="animate-spin h-16 w-16 text-ncyan drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-100" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="sr-only">Loading</span>
                     </div>
                 )}
             </div>
