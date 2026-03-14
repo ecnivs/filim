@@ -300,7 +300,7 @@ export default function WatchPage() {
         }
     }, []);
 
-    const stableSource = useMemo(() => ({ url: manifestUrl! }), [manifestUrl]);
+    const stableSource = useMemo(() => manifestUrl ? { url: manifestUrl } : null, [manifestUrl]);
 
     const stableAudioLanguages = useMemo(() => {
         return audioLanguages?.map((lang) => ({
@@ -361,9 +361,9 @@ export default function WatchPage() {
     return (
         <main className="h-screen w-screen overflow-hidden bg-black text-white">
             <div className="relative h-full w-full bg-black">
-                {!error && manifestUrl && (
+                {!error && (
                     <Player
-                        source={stableSource}
+                        source={stableSource || undefined}
                         title={animeDetails?.title}
                         episodeLabel={episodeLabel}
                         onBack={handleBack}

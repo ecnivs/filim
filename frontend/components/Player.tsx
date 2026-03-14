@@ -44,7 +44,7 @@ type QualityOption = {
 };
 
 type PlayerProps = {
-    source: PlayerSource;
+    source?: PlayerSource;
     title?: string;
     episodeLabel?: string;
     initialTimeSeconds?: number;
@@ -135,6 +135,8 @@ export function Player({
     const hasAppliedInitialTime = useRef(false);
     const lastSourceUrlRef = useRef<string | null>(null);
     const seekBarRef = useRef<HTMLDivElement | null>(null);
+    const [isMobileDevice, setIsMobileDevice] = useState(false);
+    const [isCssLandscape, setIsCssLandscape] = useState(false);
 
     // Stable refs for callbacks so the setup effect doesn't re-trigger
     const onProgressRef = useRef(onProgress);
@@ -161,6 +163,33 @@ export function Player({
                 : null
     );
 
+    // Initial mobile check and landscape enforcement
+    useEffect(() => {
+        if (typeof window === "undefined" || !navigator) return;
+
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        setIsMobileDevice(isMobile);
+
+        const checkOrientation = () => {
+            if (isMobile && window.innerHeight > window.innerWidth) {
+                setIsCssLandscape(true);
+            } else {
+                setIsCssLandscape(false);
+            }
+        };
+
+        if (isMobile) {
+            checkOrientation();
+            window.addEventListener("resize", checkOrientation);
+            // Attempt native enforcement immediately (might be blocked but we try)
+            void enforceMobileFullscreen();
+        }
+
+        return () => {
+            window.removeEventListener("resize", checkOrientation);
+        };
+    }, []);
+
     // Setup media source (HLS or direct)
     useEffect(() => {
         const video = videoRef.current;
@@ -176,6 +205,11 @@ export function Player({
         if (hlsRef.current) {
             hlsRef.current.destroy();
             hlsRef.current = null;
+        }
+
+        if (!source || !source.url) {
+            setIsBuffering(true);
+            return;
         }
 
         const isHls = source.isHls ?? source.url.includes(".m3u8");
@@ -206,26 +240,15 @@ export function Player({
             hls.loadSource(source.url);
             hls.attachMedia(video);
 
-            hls.on(Hls.Events.ERROR, (_event, data) => {
-                console.error("HLS Error:", data.type, data.details, data.error?.message);
-                if (data.fatal) {
-                    const err = new Error(data.error?.message || "Fatal HLS error");
-                    onErrorRef.current?.(err);
-                }
+            hls.on(Hls.Events.ERROR, (_event, _data) => {
             });
 
-            hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-                console.log("HLS Manifest Parsed:", {
-                    levels: data.levels.length,
-                    audio: data.audioTracks?.length || 0,
-                    subtitles: data.subtitleTracks?.length || 0
-                });
+            hls.on(Hls.Events.MANIFEST_PARSED, (_event, _data) => {
                 // Apply resume position here — HLS is guaranteed to be ready to seek
                 applyResumeTime();
             });
 
             hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_event, data: any) => {
-                console.log("HLS Subtitle Tracks Updated:", data.subtitleTracks);
                 const tracks = (data.subtitleTracks || []).map(
                     (track: any, index: number) => ({
                         id: index,
@@ -235,7 +258,6 @@ export function Player({
                 setSubtitleTracks(tracks);
 
                 if (tracks.length === 0) {
-                    console.warn("No subtitle tracks found in manifest update.");
                     setCurrentSubtitleId(null);
                     const anyHls = hls as any;
                     anyHls.subtitleTrack = -1;
@@ -249,13 +271,11 @@ export function Player({
                 anyHls.subtitleTrack = defaultId;
             });
 
-            hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (event: any, data: any) => {
-                console.log("HLS Subtitle Track Switch Event:", event, "Data:", data);
+            hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (_event: any, data: any) => {
                 setCurrentSubtitleId(typeof data.id === "number" ? data.id : null);
             });
 
-            hls.on(Hls.Events.NON_NATIVE_TEXT_TRACKS_FOUND, (_event: any, data: any) => {
-                console.log("HLS Non-native Text Tracks Found:", data.tracks);
+            hls.on(Hls.Events.NON_NATIVE_TEXT_TRACKS_FOUND, (_event, _data: any) => {
             });
 
             hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_event, data: any) => {
@@ -402,7 +422,7 @@ export function Player({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [source.url]);
+    }, [source?.url]);
 
     // Apply late-arriving initialTimeSeconds (e.g. resume from "Continue watching")
     useEffect(() => {
@@ -423,7 +443,7 @@ export function Player({
 
     // Periodic progress reporting
     useEffect(() => {
-        if (!onProgress) return;
+        if (!onProgress || !source?.url) return;
 
         const video = videoRef.current;
         if (!video) return;
@@ -438,7 +458,7 @@ export function Player({
         }, PROGRESS_INTERVAL_MS);
 
         return () => window.clearInterval(id);
-    }, [onProgress, source.url]);
+    }, [onProgress, source?.url]);
 
     // Sync native text tracks as a fallback for subtitles
     useEffect(() => {
@@ -453,7 +473,6 @@ export function Player({
             }));
 
             if (nativeTracks.length > 0) {
-                console.log("Native Text Tracks Detected:", nativeTracks);
                 // We only add them if subtitleTracks is empty or they aren't already there
                 setSubtitleTracks(prev => {
                     if (prev.length > 0) return prev;
@@ -587,12 +606,54 @@ export function Player({
         return () => window.removeEventListener("keydown", handleKey);
     });
 
+    const enforceMobileFullscreen = async () => {
+        const container = containerRef.current;
+        const video = videoRef.current;
+        if (!container || !video || typeof window === "undefined" || !navigator) return;
+        
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (!isMobile) return;
+
+        try {
+            const isFs =
+                document.fullscreenElement ||
+                // @ts-ignore
+                document.webkitFullscreenElement;
+
+            if (!isFs) {
+                if (container.requestFullscreen) {
+                    await container.requestFullscreen();
+                } else if ((container as any).webkitRequestFullscreen) {
+                    await (container as any).webkitRequestFullscreen();
+                } else if ((video as any).webkitEnterFullscreen) {
+                    (video as any).webkitEnterFullscreen();
+                }
+            }
+
+            if (window.screen && window.screen.orientation && (window.screen.orientation as any).lock) {
+                await (window.screen.orientation as any).lock("landscape");
+            } else {
+                // Determine if we need CSS rotation (portrait phone)
+                if (window.innerHeight > window.innerWidth) {
+                    setIsCssLandscape(true);
+                }
+            }
+        } catch (err) {
+            console.warn("Could not enforce mobile fullscreen or landscape", err);
+            // Fallback to CSS rotation if native APIs fail
+            if (window.innerHeight > window.innerWidth) {
+                setIsCssLandscape(true);
+            }
+        }
+    };
+
     const togglePlay = () => {
         const video = videoRef.current;
         if (!video) return;
         if (video.paused) {
             void video.play();
             setIsPlaying(true);
+            void enforceMobileFullscreen();
         } else {
             video.pause();
             setIsPlaying(false);
@@ -769,16 +830,6 @@ export function Player({
     const progressPercent = duration ? (currentTime / duration) * 100 : 0;
     const effectivePercent = isScrubbing ? scrubPercent : progressPercent;
 
-    const formatAudioLabel = () => {
-        if (languageOptions && languageOptions.length > 0) {
-            const current =
-                languageOptions.find((lang) => lang.id === currentLanguageId) ??
-                languageOptions[0];
-            return current.label;
-        }
-        return "Audio";
-    };
-
     const changePlaybackSpeed = (speed: number) => {
         const video = videoRef.current;
         if (!video) return;
@@ -787,23 +838,43 @@ export function Player({
     };
 
     return (
-        <div
-            ref={containerRef}
-            className="relative flex h-full w-full flex-col bg-black text-white overflow-hidden"
-            onClick={() => {
-                if (!controlsVisible) {
-                    setControlsVisible(true);
-                } else {
-                    togglePlay();
-                }
-            }}
+        <div 
+            className={`fixed inset-0 z-50 bg-black ${isCssLandscape ? "landscape-fallback" : ""}`}
         >
-            <video
-                ref={videoRef}
-                className="h-full w-full bg-black object-contain"
-                playsInline
-                controls={false}
-            />
+            <style dangerouslySetInnerHTML={{__html: `
+                .landscape-fallback {
+                    width: 100vh !important;
+                    height: 100vw !important;
+                    transform: rotate(90deg) translate(100%, 0) !important;
+                    transform-origin: top right !important;
+                    position: fixed !important;
+                    top: 0 !important;
+                    right: 100% !important;
+                    overflow: hidden !important;
+                }
+            `}} />
+            <div
+                ref={containerRef}
+                className="relative flex h-full w-full flex-col bg-black text-white overflow-hidden"
+                onClick={() => {
+                    const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                    if (isMobile) {
+                        void enforceMobileFullscreen();
+                    }
+
+                    if (!controlsVisible) {
+                        setControlsVisible(true);
+                    } else {
+                        togglePlay();
+                    }
+                }}
+            >
+                <video
+                    ref={videoRef}
+                    className="h-full w-full bg-black object-contain"
+                    playsInline
+                    controls={false}
+                />
 
             {/* Gradient overlays */}
             <Transition
@@ -1192,23 +1263,27 @@ export function Player({
                                     activeIds={[playbackSpeed.toString()]}
                                 />
 
-                                <button
-                                    type="button"
-                                    onClick={toggleFullscreen}
-                                    className="text-white transition-transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-0"
-                                    aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                                >
-                                    {isFullscreen ? (
-                                        <Minimize className="h-7 w-7" />
-                                    ) : (
-                                        <Maximize className="h-7 w-7" />
-                                    )}
-                                </button>
+                                {/* Hide the fullscreen button exclusively for mobile users, per Netflix UI */}
+                                {!isMobileDevice && (
+                                    <button
+                                        type="button"
+                                        onClick={toggleFullscreen}
+                                        className="text-white transition-transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-0"
+                                        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                                    >
+                                        {isFullscreen ? (
+                                            <Minimize className="h-7 w-7" />
+                                        ) : (
+                                            <Maximize className="h-7 w-7" />
+                                        )}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
             </Transition>
+            </div>
         </div>
     );
 }
