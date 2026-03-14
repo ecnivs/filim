@@ -15,7 +15,7 @@ export default function AnimeDetailModal({ params }: { params: { id: string } })
 
     return (
         <Modal isOpen={isVisible} onClose={() => router.back()}>
-            <div className="max-h-[90vh] overflow-y-auto scrollbar-hide rounded-xl">
+            <div className="max-h-[90vh] overflow-y-auto scrollbar-none rounded-xl">
                 <AnimeDetailView id={params.id} onClose={() => router.back()} />
             </div>
         </Modal>

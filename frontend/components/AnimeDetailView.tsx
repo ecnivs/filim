@@ -127,6 +127,14 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
             return res.data.items;
         }
     });
+
+    const filteredSeasons = (series.data || []).filter(s =>
+        /season|s\d+|part|cour/i.test(s.title) ||
+        s.id === id
+    );
+
+    const currentSeason = filteredSeasons.find(s => s.id === id) || filteredSeasons[0];
+
     const [synopsisExpanded, setSynopsisExpanded] = useState(false);
 
     if (isLoading || !data) {
@@ -282,16 +290,20 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                 {/* Episodes Section */}
                 <section className="space-y-6">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-3xl font-black text-white">Episodes</h2>
-                        {series.data && series.data.length > 1 && (
+                        <div className="flex flex-col gap-1">
+                            <h2 className="text-3xl font-black text-white uppercase tracking-tight">
+                                {filteredSeasons.length > 1 ? currentSeason?.title : "Episodes"}
+                            </h2>
+                        </div>
+                        {filteredSeasons.length > 1 && (
                             <select
                                 value={data.id}
                                 onChange={(e) => {
                                     router.push(`/anime/${e.target.value}`, { scroll: false });
                                 }}
-                                className="bg-neutral-800 text-white text-sm font-bold py-2 px-4 rounded border border-neutral-600 outline-none"
+                                className="bg-neutral-800 text-white text-xs font-black uppercase tracking-widest py-2.5 px-4 rounded border border-white/10 outline-none hover:bg-neutral-700 transition-colors cursor-pointer"
                             >
-                                {series.data.map(item => (
+                                {filteredSeasons.map(item => (
                                     <option key={item.id} value={item.id}>{item.title}</option>
                                 ))}
                             </select>
@@ -352,6 +364,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                                     rating={getPreferenceForAnime(anime.id)?.rating ?? null}
                                     onToggleList={() => handleToggleList(anime.id)}
                                     onSetRating={(next) => next && handleSetRating(anime.id, next)}
+                                    widthClassName="w-full"
                                 />
                             ))}
                         </div>

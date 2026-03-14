@@ -23,6 +23,7 @@ export type AnimeCardProps = {
     rating?: "like" | "dislike" | null;
     onToggleList?: () => void;
     onSetRating?: (rating: "like" | "dislike" | null) => void;
+    widthClassName?: string;
 };
 
 export function AnimeCard({
@@ -30,7 +31,8 @@ export function AnimeCard({
     isInList,
     rating,
     onToggleList,
-    onSetRating
+    onSetRating,
+    widthClassName = "w-[calc(92vw/2)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: AnimeCardProps) {
     const router = useRouter();
     const playHref = `/watch/${anime.id}/1`;
@@ -49,7 +51,7 @@ export function AnimeCard({
 
     return (
         <div
-            className="group/card relative flex-shrink-0 w-[calc(92vw/2)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)] transition-all duration-300 group-hover/row-inner:opacity-30 hover:!opacity-100 hover:z-50 cursor-pointer"
+            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 group-hover/row-inner:opacity-30 hover:!opacity-100 hover:z-50 cursor-pointer select-none`}
             onClick={handleCardClick}
         >
             <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out group-hover/card:scale-[1.25] group-hover/card:z-30 group-hover/card:delay-[100ms]">

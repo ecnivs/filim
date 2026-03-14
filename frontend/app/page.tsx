@@ -40,14 +40,6 @@ export default function HomePage() {
     const searchParams = useSearchParams();
     const urlQuery = searchParams.get("q") || "";
 
-    const [debouncedSearch, setDebouncedSearch] = useState("");
-
-    useEffect(() => {
-        const id = setTimeout(() => setDebouncedSearch(urlQuery.trim()), 300);
-        return () => clearTimeout(id);
-    }, [urlQuery]);
-
-
     const continueWatching = useQuery({
         queryKey: ["continue-watching"],
         queryFn: async () => {
@@ -85,11 +77,11 @@ export default function HomePage() {
     });
 
     const searchResults = useQuery({
-        queryKey: ["search", debouncedSearch],
-        enabled: debouncedSearch.length > 0,
+        queryKey: ["search", urlQuery],
+        enabled: urlQuery.length > 0,
         queryFn: async () => {
             const res = await api.get<{ items: AnimeSummary[] }>("/catalog/search", {
-                params: { q: debouncedSearch, mode: "sub" }
+                params: { q: urlQuery, mode: "sub" }
             });
             return res.data.items;
         }
@@ -153,17 +145,17 @@ export default function HomePage() {
 
     return (
         <div className="pb-16">
-            {debouncedSearch ? (
+            {urlQuery ? (
                 <div className="px-[4%] pt-24 pb-12">
                     <h2 className="text-2xl font-black text-white mb-6">
-                        Search results for "{debouncedSearch}"
+                        Search results for "{urlQuery}"
                     </h2>
                     {searchResults.isLoading ? (
                         <p className="text-sm text-neutral-400">Searching…</p>
                     ) : searchResults.isError ? (
                         <p className="text-sm text-red-400">Something went wrong. Please try again.</p>
                     ) : searchResults.data && searchResults.data.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                             {searchResults.data.map((anime) => (
                                 <AnimeCard
                                     key={anime.id}
@@ -171,6 +163,7 @@ export default function HomePage() {
                                     isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
                                     rating={getPreferenceForAnime(anime.id)?.rating ?? null}
                                     onToggleList={() => handleToggleList(anime.id)}
+                                    widthClassName="w-full"
                                     onSetRating={(next: "like" | "dislike" | null) => {
                                         if (!next) return;
                                         handleSetRating(anime.id, next);
@@ -325,7 +318,8 @@ function ContinueCard({
     rating,
     onToggleList,
     onSetRating,
-    animeId
+    animeId,
+    widthClassName = "w-[calc(92vw/2)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: {
     title: string;
     href: string;
@@ -339,6 +333,7 @@ function ContinueCard({
     onToggleList?: () => void;
     onSetRating?: (rating: "like" | "dislike" | null) => void;
     animeId?: string;
+    widthClassName?: string;
 }) {
     const router = useRouter();
     const [imageFailed, setImageFailed] = useState(false);
@@ -349,7 +344,7 @@ function ContinueCard({
     };
     return (
         <div
-            className="group/card relative flex-shrink-0 w-[calc(92vw/2)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)] transition-all duration-300 hover:z-50 cursor-pointer"
+            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 hover:z-50 cursor-pointer select-none`}
             onClick={handleCardClick}
         >
             <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out group-hover/card:scale-[1.25] group-hover/card:z-30 group-hover/card:delay-[100ms]">

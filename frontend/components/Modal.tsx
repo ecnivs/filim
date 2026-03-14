@@ -37,7 +37,7 @@ export function Modal({ children, onClose, isOpen }: ModalProps) {
     return createPortal(
         <div
             ref={overlayRef}
-            className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm pt-8 sm:pt-12 pb-8 px-4 sm:px-0 scrollbar-hide"
+            className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm pt-8 sm:pt-12 pb-8 px-4 sm:px-0 scrollbar-none"
             onClick={(e) => {
                 if (e.target === overlayRef.current) onClose();
             }}

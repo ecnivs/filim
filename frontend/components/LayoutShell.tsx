@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ProfileProvider, useProfile } from "@/lib/profile-context";
+import { Suspense, useRef } from "react";
 
 const NAV_ITEMS: { href: string; label: string }[] = [
     { href: "/", label: "Home" }
@@ -12,10 +13,12 @@ const NAV_ITEMS: { href: string; label: string }[] = [
 function LayoutShellInner({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { profile, isReady } = useProfile();
     const [scrolled, setScrolled] = useState(false);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!isReady) return;
@@ -30,10 +33,54 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
         return () => window.removeEventListener("scroll", onScroll);
     }, []);
 
+    // 1. Sync state FROM URL (External changes like Back button)
+    useEffect(() => {
+        const urlQuery = searchParams.get("q") || "";
+        if (urlQuery !== searchQuery) {
+            if (urlQuery) {
+                setSearchQuery(urlQuery);
+                setIsSearchExpanded(true);
+            } else if (pathname === "/") {
+                setSearchQuery("");
+                setIsSearchExpanded(false);
+            }
+        }
+    }, [searchParams, pathname]);
+
+    // 2. Push state TO URL (Debounced typing)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const urlQuery = searchParams.get("q") || "";
+            if (searchQuery === urlQuery) return;
+
+            if (searchQuery.trim()) {
+                router.push(`/?q=${encodeURIComponent(searchQuery.trim())}`);
+            } else if (urlQuery) {
+                router.push("/");
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [searchQuery, router]);
+
+    useEffect(() => {
+        if (isSearchExpanded) {
+            searchInputRef.current?.focus();
+        }
+    }, [isSearchExpanded]);
+
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (searchQuery.trim()) {
             router.push(`/?q=${encodeURIComponent(searchQuery.trim())}`);
+        }
+    };
+
+    const toggleSearch = () => {
+        if (!isSearchExpanded) {
+            setIsSearchExpanded(true);
+        } else {
+            searchInputRef.current?.focus();
         }
     };
 
@@ -44,7 +91,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
     return (
         <div className="min-h-screen bg-background text-foreground">
             <header
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled
+                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 select-none ${scrolled
                     ? "bg-background/95 backdrop-blur-md shadow-[0_2px_20px_rgba(0,0,0,0.5)]"
                     : "bg-gradient-to-b from-black/80 via-black/40 to-transparent"
                     }`}
@@ -53,7 +100,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                     <div className="flex items-center gap-6">
                         <Link
                             href="/"
-                            className="text-ncyan text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none"
+                            className="text-ncyan text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none"
                         >
                             Filim
                         </Link>
@@ -67,7 +114,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                     <Link
                                         key={item.label}
                                         href={item.href}
-                                        className={`font-medium transition-colors ${isActive
+                                        className={`font-medium transition-colors select-none ${isActive
                                             ? "text-white"
                                             : "text-neutral-300 hover:text-white"
                                             }`}
@@ -82,8 +129,8 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                         <div className={`relative flex items-center transition-all duration-300 ${isSearchExpanded ? "w-64" : "w-8"}`}>
                             <button
                                 type="button"
-                                onClick={() => setIsSearchExpanded(!isSearchExpanded)}
-                                className="text-white hover:text-neutral-300 transition-colors p-1 z-10"
+                                onClick={toggleSearch}
+                                className="text-white hover:text-neutral-300 transition-colors p-1 z-10 select-none"
                                 aria-label="Toggle search"
                             >
                                 <svg
@@ -105,13 +152,13 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                 className={`absolute left-0 top-1/2 -translate-y-1/2 w-full transition-all duration-300 overflow-hidden ${isSearchExpanded ? "opacity-100 pl-8" : "opacity-0 pointer-events-none"}`}
                             >
                                 <input
+                                    ref={searchInputRef}
                                     type="text"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     onBlur={() => !searchQuery && setIsSearchExpanded(false)}
                                     placeholder="Titles, genres..."
                                     className="w-full bg-black/60 border border-white/20 backdrop-blur-md rounded py-1 pl-2 pr-4 text-sm text-white focus:outline-none focus:border-white/40"
-                                    autoFocus={isSearchExpanded}
                                 />
                             </form>
                         </div>
@@ -131,5 +178,9 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
 }
 
 export function LayoutShell({ children }: { children: ReactNode }) {
-    return <LayoutShellInner>{children}</LayoutShellInner>;
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-background" />}>
+            <LayoutShellInner>{children}</LayoutShellInner>
+        </Suspense>
+    );
 }
