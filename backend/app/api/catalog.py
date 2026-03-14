@@ -8,7 +8,7 @@ from app.sources import AnimeSummaryModel, EpisodeSummaryModel
 
 
 class AnimeSummaryResponse(BaseModel):
-    id: str
+    id: str | None = None
     title: str
     episode_count: int
     poster_image_url: str | None = None
@@ -44,7 +44,7 @@ class EpisodeSummaryResponse(BaseModel):
 
 
 class AnimeDetailsResponse(BaseModel):
-    id: str
+    id: str | None = None
     title: str
     episode_count: int
     episodes: list[EpisodeSummaryResponse]
@@ -126,3 +126,14 @@ async def get_anime_episodes(
 ) -> dict[str, list[EpisodeSummaryResponse]]:
     episodes = await catalog.get_episode_list(anime_id=anime_id, mode=mode)
     return {"items": [EpisodeSummaryResponse.from_source(e) for e in episodes]}
+
+
+@router.get("/{anime_id}/series")
+async def get_anime_series(
+    anime_id: str,
+    mode: str = Query("sub", pattern="^(sub|dub)$"),
+    catalog: CatalogService = Depends(_get_catalog_service),
+) -> dict[str, list[AnimeSummaryResponse]]:
+    """Return all related seasons/shows for a given anime to build a series lineup."""
+    items = await catalog.get_series_lineup(anime_id=anime_id, mode=mode)
+    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}

@@ -13,10 +13,6 @@ class Device(Base):
     mac_address: Mapped[str] = mapped_column(String, nullable=False, index=True)
     device_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    tokens: Mapped[list["DeviceToken"]] = relationship(
-        back_populates="device",
-        cascade="all, delete-orphan",
-    )
     watch_progress: Mapped[list["WatchProgress"]] = relationship(
         back_populates="device",
         cascade="all, delete-orphan",
@@ -28,21 +24,7 @@ class Device(Base):
     )
 
 
-class DeviceToken(Base):
-    __tablename__ = "device_tokens"
 
-    device_id: Mapped[str] = mapped_column(
-        ForeignKey("devices.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    token: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-
-    device: Mapped[Device] = relationship(back_populates="tokens")
 
 
 class WatchProgress(Base):

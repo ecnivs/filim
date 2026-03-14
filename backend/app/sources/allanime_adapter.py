@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional
 import json
+import re
 
 import httpx
 from pydantic import BaseModel
@@ -11,8 +12,9 @@ from app.core.config import settings
 
 
 class AnimeSummaryModel(BaseModel):
-    id: str
+    id: Optional[str] = None
     title: str
+    english_title: Optional[str] = None
     episode_count: int
     synopsis: Optional[str] = None
     tags: list[str] = []
@@ -20,6 +22,8 @@ class AnimeSummaryModel(BaseModel):
     # Stable audio language codes derived from AllAnime's translation types.
     # We currently map `sub` → \"ja\" and `dub` → \"en\" when episodes exist.
     available_audio_languages: list[str] = []
+    related_shows: list[dict[str, Any]] = []
+    alt_names: list[str] = []
 
 
 class EpisodeSummaryModel(BaseModel):
@@ -80,6 +84,20 @@ class _AllAnimeClient:
             return data.get("data", {})
 
 
+import html
+
+
+def strip_html(text: str | None) -> str | None:
+    if not text:
+        return text
+    # Decoded HTML entities like &lt; and &gt;
+    text = html.unescape(text)
+    # Replace <br> and similar with newlines
+    text = re.sub(r"<(br\s*/?|/p)>", "\n", text, flags=re.IGNORECASE)
+    # Strip all other tags
+    return re.sub(r"<[^>]+>", "", text).strip()
+
+
 class AllAnimeSourceAdapter:
     """Adapter that reimplements ani-cli behavior against the AllAnime GraphQL API."""
 
@@ -101,7 +119,7 @@ class AllAnimeSourceAdapter:
             "$countryOrigin: VaildCountryOriginEnumType ) { "
             "shows( search: $search limit: $limit page: $page "
             "translationType: $translationType countryOrigin: $countryOrigin ) { "
-            "edges { _id name description genres thumbnail "
+            "edges { _id name englishName altNames description genres thumbnail "
             "availableEpisodesDetail __typename } } }"
         )
         variables = {
@@ -132,15 +150,19 @@ class AllAnimeSourceAdapter:
             if thumb and not thumb.startswith("http"):
                 base = settings.allanime_api_url.rsplit("/api", 1)[0]
                 thumb = f"{base}/{thumb.lstrip('/')}"
+            source_id = edge.get("_id")
+            title = edge.get("englishName") or edge.get("name") or ""
             results.append(
                 AnimeSummaryModel(
-                    id=str(edge.get("_id")),
-                    title=edge.get("name") or "",
+                    id=str(source_id) if source_id else None,
+                    title=title,
+                    english_title=edge.get("englishName"),
                     episode_count=episode_count,
-                    synopsis=edge.get("description") or None,
+                    synopsis=strip_html(edge.get("description")) or None,
                     tags=list(edge.get("genres") or []),
                     poster_image_url=thumb,
                     available_audio_languages=languages,
+                    alt_names=list(edge.get("altNames") or []),
                 )
             )
         return results
@@ -163,7 +185,7 @@ class AllAnimeSourceAdapter:
             "$countryOrigin: VaildCountryOriginEnumType ) { "
             "shows( search: $search limit: $limit page: $page "
             "translationType: $translationType countryOrigin: $countryOrigin ) { "
-            "edges { _id name description genres thumbnail "
+            "edges { _id name englishName altNames description genres thumbnail "
             "availableEpisodesDetail __typename } } }"
         )
         variables = {
@@ -194,15 +216,19 @@ class AllAnimeSourceAdapter:
             if thumb and not thumb.startswith("http"):
                 base = settings.allanime_api_url.rsplit("/api", 1)[0]
                 thumb = f"{base}/{thumb.lstrip('/')}"
+            source_id = edge.get("_id")
+            title = edge.get("englishName") or edge.get("name") or ""
             results.append(
                 AnimeSummaryModel(
-                    id=str(edge.get("_id")),
-                    title=edge.get("name") or "",
+                    id=str(source_id) if source_id else None,
+                    title=title,
+                    english_title=edge.get("englishName"),
                     episode_count=episode_count,
-                    synopsis=edge.get("description") or None,
+                    synopsis=strip_html(edge.get("description")) or None,
                     tags=list(edge.get("genres") or []),
                     poster_image_url=thumb,
                     available_audio_languages=languages,
+                    alt_names=list(edge.get("altNames") or []),
                 )
             )
         return results
@@ -217,14 +243,14 @@ class AllAnimeSourceAdapter:
           show(_id: $id) {
             _id
             name
+            englishName
+            altNames
             description
             genres
             thumbnail
             status
-            availableEpisodesDetail {
-              sub
-              dub
-            }
+            relatedShows
+            availableEpisodesDetail
           }
         }
         """
@@ -253,14 +279,19 @@ class AllAnimeSourceAdapter:
         if thumb and not thumb.startswith("http"):
             base = settings.allanime_api_url.rsplit("/api", 1)[0]
             thumb = f"{base}/{thumb.lstrip('/')}"
+        source_id = show.get("_id")
+        title = show.get("englishName") or show.get("name") or ""
         return AnimeSummaryModel(
-            id=str(show.get("_id")),
-            title=show.get("name") or "",
+            id=str(source_id) if source_id else None,
+            title=title,
+            english_title=show.get("englishName"),
             episode_count=episode_count,
-            synopsis=show.get("description") or None,
+            synopsis=strip_html(show.get("description")) or None,
             tags=list(show.get("genres") or []),
             poster_image_url=thumb,
             available_audio_languages=languages,
+            related_shows=list(show.get("relatedShows") or []),
+            alt_names=list(show.get("altNames") or []),
         )
 
     async def get_episode_list(
@@ -271,10 +302,7 @@ class AllAnimeSourceAdapter:
         gql = """
         query ($id: String!) {
           show(_id: $id) {
-            availableEpisodesDetail {
-              sub
-              dub
-            }
+            availableEpisodesDetail
           }
         }
         """

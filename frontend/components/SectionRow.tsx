@@ -1,73 +1,135 @@
 "use client";
 
-import { Children, ReactNode, useState } from "react";
+import { Children, ReactNode, useEffect, useRef, useState } from "react";
 
 type SectionRowProps = {
-  title: string;
-  children: ReactNode;
-  browseLabel?: string;
+    title: string;
+    children: ReactNode;
+    browseLabel?: string;
 };
 
 export function SectionRow({
-  title,
-  children,
-  browseLabel = "Browse all"
+    title,
+    children,
+    browseLabel = "Explore more"
 }: SectionRowProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const hasItems = Children.count(children) > 0;
+    const [isOpen, setIsOpen] = useState(false);
+    const [showLeft, setShowLeft] = useState(false);
+    const [showRight, setShowRight] = useState(false);
+    const [scrollProgress, setScrollProgress] = useState(0);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const hasItems = Children.count(children) > 0;
 
-  return (
-    <>
-      <section className="relative z-40 space-y-3">
-        <div className="mx-auto flex max-w-6xl items-baseline px-1">
-          <h2 className="text-lg sm:text-xl font-semibold text-white">{title}</h2>
-          {hasItems && (
-            <button
-              type="button"
-              onClick={() => setIsOpen(true)}
-              className="ml-4 inline-flex items-center gap-1 text-[0.7rem] sm:text-xs text-neutral-400 hover:text-white"
-            >
-              <span>{browseLabel}</span>
-              <span aria-hidden>›</span>
-            </button>
-          )}
-        </div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex gap-3 overflow-x-auto overflow-y-visible pb-6 snap-x snap-mandatory scroll-smooth scrollbar-none">
-            {children}
-          </div>
-        </div>
-      </section>
+    const checkScroll = () => {
+        const el = scrollRef.current;
+        if (!el) return;
 
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex h-full w-full items-center justify-center bg-black/80 px-4 py-6">
-          <div className="relative flex h-full max-h-[80vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-neutral-900/80 bg-gradient-to-b from-neutral-950 via-black to-neutral-950 shadow-[0_28px_80px_rgba(0,0,0,0.9)]">
-            <div className="flex items-center justify-between border-b border-neutral-900/80 px-6 py-4">
-              <div className="space-y-1">
-                <p className="text-[0.65rem] uppercase tracking-[0.18em] text-neutral-400">
-                  Explore all
-                </p>
-                <h2 className="text-xl sm:text-2xl font-semibold text-white">
-                  {title}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="rounded-full border border-neutral-700/80 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:border-white hover:text-white hover:bg-neutral-900"
-              >
-                Close
-              </button>
-            </div>
-            <div className="relative flex-1 overflow-y-auto px-6 py-5">
-              <div className="grid grid-cols-2 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {children}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
+        // Visibility of arrows
+        setShowLeft(el.scrollLeft > 5);
+        const scrollable = el.scrollWidth - el.clientWidth;
+        setShowRight(el.scrollLeft < scrollable - 5);
+
+        // Update scroll progress (0 to 100)
+        if (scrollable > 0) {
+            const progress = (el.scrollLeft / scrollable) * 100;
+            setScrollProgress(progress);
+        }
+    };
+
+    useEffect(() => {
+        checkScroll();
+        window.addEventListener("resize", checkScroll);
+        return () => window.removeEventListener("resize", checkScroll);
+    }, [children]);
+
+    const scroll = (direction: "left" | "right") => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const amount = el.clientWidth * 0.8;
+        el.scrollBy({
+            left: direction === "left" ? -amount : amount,
+            behavior: "smooth"
+        });
+        // Check again after animation
+        setTimeout(checkScroll, 500);
+    };
+
+    return (
+        <>
+            <section className={`relative -my-10 group/row select-none transition-[z-index] duration-0 ${isOpen ? "z-50" : "z-40 hover:z-[60]"}`}>
+                <div className="flex items-center justify-between px-[4%] pb-3 pt-10 relative z-10">
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-sm sm:text-base md:text-lg font-bold text-white leading-none">{title}</h2>
+                        {hasItems && (
+                            <button
+                                type="button"
+                                onClick={() => setIsOpen(true)}
+                                className="text-[0.65rem] sm:text-xs text-ncyan font-medium"
+                            >
+                                {browseLabel} ›
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Fluid Scroll Indicator */}
+                    {(showLeft || showRight) && (
+                        <div className="w-16 sm:w-24 h-[1.5px] bg-neutral-800 rounded-full relative overflow-hidden opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 mb-1 pointer-events-none">
+                            <div
+                                className="h-full bg-neutral-500 transition-transform duration-75 rounded-full absolute top-0 left-0 w-[30%] origin-left"
+                                style={{ transform: `translateX(${scrollProgress * 2.3333}%)` }}
+                            />
+                        </div>
+                    )}
+                </div>
+                <div className="relative group/row">
+                    {/* Carousel container */}
+                    <div
+                        ref={scrollRef}
+                        onScroll={checkScroll}
+                        className="flex gap-1.5 overflow-x-auto overflow-y-clip scrollbar-none px-[4%] py-10 -my-10 scroll-smooth"
+                    >
+                        {children}
+                    </div>
+
+                    {/* Scroll Buttons */}
+                    <button
+                        onClick={() => scroll("left")}
+                        className={`absolute left-0 top-0 bottom-0 z-40 flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showLeft ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
+                        aria-label="Scroll left"
+                    >
+                        <span className="text-3xl text-white hover:scale-125 transition-transform">‹</span>
+                    </button>
+                    <button
+                        onClick={() => scroll("right")}
+                        className={`absolute right-0 top-0 bottom-0 z-40 flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showRight ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
+                        aria-label="Scroll right"
+                    >
+                        <span className="text-3xl text-white hover:scale-125 transition-transform">›</span>
+                    </button>
+                </div>
+            </section>
+
+            {isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
+                    <div className="relative flex h-full max-h-[85vh] w-full max-w-7xl flex-col overflow-hidden rounded-lg bg-surface shadow-[0_28px_80px_rgba(0,0,0,0.9)]">
+                        <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
+                            <h2 className="text-xl sm:text-2xl font-semibold text-white">{title}</h2>
+                            <button
+                                type="button"
+                                onClick={() => setIsOpen(false)}
+                                className="h-9 w-9 rounded-full bg-surface-light flex items-center justify-center text-sm text-neutral-300 hover:bg-neutral-600 hover:text-white transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="relative flex-1 overflow-y-auto px-6 py-8">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-12 [&_>_div]:w-full">
+                                {children}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
 }
-

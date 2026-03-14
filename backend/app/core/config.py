@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     hls_root: str = "/var/media/hls"
     hls_base_url: str = "http://localhost:8080/hls"
 
-    # Security
-    device_token_ttl_days: int = 365
+    # Hardware / Processing
+    # Security / Auth limits could go here
 
     # Recommendations
     trending_window_days: int = 30

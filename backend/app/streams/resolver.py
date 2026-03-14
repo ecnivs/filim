@@ -32,7 +32,9 @@ class StreamResolver:
     def __init__(self, yt_dlp_binary: str = "yt-dlp") -> None:
         self.yt_dlp_binary = yt_dlp_binary
 
-    def resolve(self, candidate: StreamCandidateModel, preferred_quality: Optional[str] = None) -> ResolvedStream:
+    def resolve(
+        self, candidate: StreamCandidateModel, preferred_quality: Optional[str] = None
+    ) -> ResolvedStream:
         """Return a direct media URL for a given provider candidate.
 
         Args:
@@ -71,7 +73,9 @@ class StreamResolver:
                     resp = client.get(clock_url)
                     resp.raise_for_status()
             except httpx.HTTPError as exc:
-                raise StreamResolverError(f"Failed to resolve AllAnime clock URL: {exc}") from exc
+                raise StreamResolverError(
+                    f"Failed to resolve AllAnime clock URL: {exc}"
+                ) from exc
 
             data = resp.json()
             links = data.get("links") or []
@@ -102,7 +106,9 @@ class StreamResolver:
         # 2) Direct media URL fast path
         # -----------------------------
         # If the URL already looks like a direct media resource, bypass yt-dlp.
-        if any(ext in url for ext in (".m3u8", ".mp4", ".webm", ".mkv", ".avi", ".mov")):
+        if any(
+            ext in url for ext in (".m3u8", ".mp4", ".webm", ".mkv", ".avi", ".mov")
+        ):
             kind = "hls" if ".m3u8" in url else "file"
             return ResolvedStream(url=url, kind=kind, resolution=candidate.resolution)
 
@@ -134,11 +140,15 @@ class StreamResolver:
                 timeout=60,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            raise StreamResolverError(f"yt-dlp failed to start or timed out: {exc}") from exc
+            raise StreamResolverError(
+                f"yt-dlp failed to start or timed out: {exc}"
+            ) from exc
 
         if proc.returncode != 0:
             stderr = (proc.stderr or "").strip()
-            raise StreamResolverError(f"yt-dlp failed with code {proc.returncode}: {stderr}")
+            raise StreamResolverError(
+                f"yt-dlp failed with code {proc.returncode}: {stderr}"
+            )
 
         stdout = (proc.stdout or "").strip()
         if not stdout:
@@ -150,5 +160,6 @@ class StreamResolver:
             raise StreamResolverError("yt-dlp produced an empty URL")
 
         kind = "hls" if ".m3u8" in resolved_url else "file"
-        return ResolvedStream(url=resolved_url, kind=kind, resolution=candidate.resolution)
-
+        return ResolvedStream(
+            url=resolved_url, kind=kind, resolution=candidate.resolution
+        )

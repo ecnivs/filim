@@ -12,6 +12,7 @@ from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverE
 class StreamVariantModel(BaseModel):
     id: str
     resolution: Optional[str] = None
+    provider: Optional[str] = None
     bitrate_kbps: Optional[int] = None
     kind: str  # "hls" or "file"
 
@@ -68,7 +69,9 @@ class StreamService:
 
         for cand in ordered:
             try:
-                resolved = self.resolver.resolve(cand, preferred_quality=preferred_quality)
+                resolved = self.resolver.resolve(
+                    cand, preferred_quality=preferred_quality
+                )
                 chosen_source = cand
                 break
             except StreamResolverError:
@@ -85,10 +88,10 @@ class StreamService:
                 StreamVariantModel(
                     id=f"v{idx}",
                     resolution=c.resolution,
+                    provider=c.provider,
                     bitrate_kbps=None,
                     kind="hls" if resolved.kind == "hls" else "file",
                 )
             )
 
         return manifest_url, variants
-

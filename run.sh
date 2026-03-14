@@ -7,9 +7,9 @@ cd "$ROOT_DIR"
 PIDS=()
 
 cleanup() {
-  for pid in "${PIDS[@]:-}"; do
-    kill "$pid" 2>/dev/null || true
-  done
+    for pid in "${PIDS[@]:-}"; do
+        kill "$pid" 2>/dev/null || true
+    done
 }
 
 trap cleanup INT TERM
@@ -21,4 +21,3 @@ PIDS+=($!)
 PIDS+=($!)
 
 wait "${PIDS[@]}"
-

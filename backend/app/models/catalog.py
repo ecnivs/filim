@@ -13,6 +13,8 @@ class Anime(Base):
     # AllAnime or other source identifier
     source_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
+    english_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    alt_names: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     slug: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     synopsis: Mapped[str | None] = mapped_column(Text, nullable=True)
     genres: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)

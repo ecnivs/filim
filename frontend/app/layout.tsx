@@ -1,32 +1,26 @@
-"use client";
-
 import "./globals.css";
-import { ReactNode, useEffect, useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DeviceProvider } from "@/lib/device-context";
+import { ReactNode } from "react";
 import { LayoutShell } from "@/components/LayoutShell";
+import { ClientProviders } from "@/components/ClientProviders";
 
-const queryClient = new QueryClient();
-
-export default function RootLayout({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  return (
-    <html lang="en">
-      <body className="bg-background text-foreground min-h-screen">
-        {mounted && (
-          <QueryClientProvider client={queryClient}>
-            <DeviceProvider>
-              <LayoutShell>{children}</LayoutShell>
-            </DeviceProvider>
-          </QueryClientProvider>
-        )}
-      </body>
-    </html>
-  );
+export default function RootLayout({
+    children,
+    modal
+}: {
+    children: ReactNode;
+    modal: ReactNode;
+}) {
+    return (
+        <html lang="en">
+            <body className="bg-background text-foreground min-h-screen antialiased">
+                <ClientProviders>
+                    <LayoutShell>
+                        {children}
+                    </LayoutShell>
+                    {modal}
+                </ClientProviders>
+            </body>
+        </html>
+    );
 }
 

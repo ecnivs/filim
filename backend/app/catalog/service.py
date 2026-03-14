@@ -17,7 +17,26 @@ class CatalogService:
         self.source = source or AllAnimeSourceAdapter()
 
     async def search(self, query: str, mode: str = "sub") -> list[AnimeSummaryModel]:
-        return await self.source.search_shows(query=query, mode=mode)
+        results = await self.source.search_shows(query=query, mode=mode)
+        if not results:
+            return []
+
+        # Group by english_title if available, otherwise title.
+        # This helps merge entries that AllAnime lists separately for sub/dub
+        # or different seasons that we might want to group (though usually seasons
+        # stay separate unless titles are identical).
+        merged: dict[str, AnimeSummaryModel] = {}
+        for item in results:
+            key = (item.english_title or item.title).lower().strip()
+            if key not in merged:
+                merged[key] = item
+            else:
+                # If we have a duplicate, we can try to merge metadata
+                # but for simplicity we'll just keep the first one found
+                # as the source usually orders by relevance.
+                pass
+
+        return list(merged.values())
 
     async def _upsert_anime_from_summary(self, summary: AnimeSummaryModel) -> None:
         """Persist or update a minimal Anime row for downstream features.
@@ -38,6 +57,8 @@ class CatalogService:
             anime = Anime(
                 source_id=summary.id,
                 title=summary.title or "",
+                english_title=summary.english_title,
+                alt_names=summary.alt_names,
                 synopsis=summary.synopsis,
                 genres=summary.tags or None,
                 episode_count=summary.episode_count or None,
@@ -47,6 +68,10 @@ class CatalogService:
         else:
             if summary.title:
                 anime.title = summary.title
+            if summary.english_title:
+                anime.english_title = summary.english_title
+            if summary.alt_names:
+                anime.alt_names = summary.alt_names
             if summary.synopsis:
                 anime.synopsis = summary.synopsis
             if summary.tags:
@@ -56,7 +81,10 @@ class CatalogService:
             if summary.poster_image_url:
                 anime.poster_url = summary.poster_image_url
 
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
 
     async def get_show_details(
         self,
@@ -162,3 +190,45 @@ class CatalogService:
         # adapter for a generic popular list so the home screen still has a
         # 'Trending' row.
         return await self.source.get_popular_shows(limit=limit)
+
+    async def get_series_lineup(
+        self, anime_id: str, mode: str = "sub"
+    ) -> list[AnimeSummaryModel]:
+        """Fetch all related seasons/shows for a given anime to build a series lineup.
+
+        This currently only does a single-level fetch of related shows to stay
+        performant, but could be extended to be recursive if needed.
+        """
+        root = await self.get_show_details(anime_id, mode=mode)
+        if not root.related_shows:
+            return [root]
+
+        lineup = [root]
+        # We only want to include clear seasons/sequels, not every
+        # single related entity.
+        for rel in root.related_shows:
+            rel_id = rel.get("showId")
+            relation = (rel.get("relation") or "").lower()
+
+            # Filter for true seasons/sequels
+            if relation not in [
+                "sequel",
+                "prequel",
+                "side_story",
+                "parent_story",
+                "alternative_setting",
+            ]:
+                continue
+
+            if not rel_id or any(item.id == rel_id for item in lineup):
+                continue
+
+            try:
+                rel_show = await self.get_show_details(rel_id, mode=mode)
+                lineup.append(rel_show)
+            except Exception:
+                continue
+
+        # Sort by title or a hypothetical season number if we had one.
+        # For now, we'll keep the root first and then others.
+        return lineup

@@ -13,7 +13,7 @@ def test_catalog_search_smoke():
     assert response.status_code in (200, 502, 503)
 
 
-def test_device_register_and_progress_flow(monkeypatch):
+def test_progress_flow(monkeypatch):
     # Fake adapter responses to avoid hitting external AllAnime during tests.
     from app.sources import (
         AllAnimeSourceAdapter,
@@ -41,29 +41,31 @@ def test_device_register_and_progress_flow(monkeypatch):
         AllAnimeSourceAdapter, "get_episode_list", fake_get_episode_list
     )
 
-    reg = client.post(
-        "/api/v1/devices/register",
-        json={"mac_address": "aa:bb:cc:dd:ee:ff", "device_name": "Test Device"},
-    )
-    assert reg.status_code == 200
-    token = reg.json()["device_token"]
+    with TestClient(app) as _client:
+        # Create a test profile to satisfy the foreign key constraint.
+        profile_res = _client.post(
+            "/api/v1/profiles",
+            json={"name": "Test User", "avatarUrl": None},
+        )
+        assert profile_res.status_code == 200
+        profile_id = profile_res.json()["id"]
 
-    progress = client.post(
-        "/api/v1/user/progress",
-        headers={"X-Device-Token": token},
-        json={
-            "anime_id": "test-anime",
-            "episode": "1",
-            "position_seconds": 60.0,
-            "duration_seconds": 120.0,
-            "is_finished": False,
-        },
-    )
-    assert progress.status_code == 200
+        progress = _client.post(
+            "/api/v1/user/progress",
+            headers={"X-Profile-Id": profile_id},
+            json={
+                "anime_id": "test-anime",
+                "episode": "1",
+                "position_seconds": 60.0,
+                "duration_seconds": 120.0,
+                "is_finished": False,
+            },
+        )
+        assert progress.status_code == 200
 
-    cont = client.get(
-        "/api/v1/user/continue-watching",
-        headers={"X-Device-Token": token},
-    )
+        cont = _client.get(
+            "/api/v1/user/continue-watching",
+            headers={"X-Profile-Id": profile_id},
+        )
     assert cont.status_code == 200
     assert isinstance(cont.json().get("items"), list)
