@@ -147,16 +147,16 @@ export default function HomePage() {
     return (
         <div className="pb-16">
             {urlQuery ? (
-                <div className="px-[4%] pt-24 pb-12">
-                    <h2 className="text-2xl font-black text-white mb-6">
-                        Search results for "{urlQuery}"
+                <div className="px-[4%] pt-20 md:pt-24 pb-12">
+                    <h2 className="text-xl md:text-2xl font-black text-white mb-6">
+                        Search results for &quot;{urlQuery}&quot;
                     </h2>
                     {searchResults.isLoading ? (
                         <p className="text-sm text-neutral-400">Searching…</p>
                     ) : searchResults.isError ? (
                         <p className="text-sm text-red-400">Something went wrong. Please try again.</p>
                     ) : searchResults.data && searchResults.data.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-6 md:gap-4">
                             {searchResults.data.map((anime) => (
                                 <AnimeCard
                                     key={anime.id}
@@ -179,7 +179,7 @@ export default function HomePage() {
             ) : (
                 <>
                     {featuredAnime && (
-                        <section className="relative w-full h-[80vh] min-h-[500px]">
+                        <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[400px] md:min-h-[500px]">
                             <div className="absolute inset-0">
                                 {featuredAnime.poster_image_url && (
                                     <Image
@@ -196,28 +196,28 @@ export default function HomePage() {
                                 <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
                                 <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
                             </div>
-                            <div className="relative z-10 flex h-full items-end pb-24 sm:pb-32 px-[4%]">
-                                <div className="max-w-lg animate-fade-in-up space-y-4">
-                                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-[1.1] drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                            <div className="relative z-10 flex h-full items-end pb-16 md:pb-24 lg:pb-32 px-[4%]">
+                                <div className="max-w-lg animate-fade-in-up space-y-3 md:space-y-4">
+                                    <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.1] drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
                                         {featuredAnime.title}
                                     </h1>
                                     {featuredAnime.synopsis && (
-                                        <p className="text-sm sm:text-base text-neutral-200 line-clamp-3 leading-relaxed">
+                                        <p className="text-xs md:text-sm lg:text-base text-neutral-200 line-clamp-2 md:line-clamp-3 leading-relaxed">
                                             {featuredAnime.synopsis}
                                         </p>
                                     )}
-                                    <div className="flex items-center gap-3 pt-1">
+                                    <div className="flex items-center gap-2 md:gap-3 pt-1">
                                         <Link
                                             href={billboardResumeHref}
-                                            className="inline-flex items-center gap-2 rounded bg-ncyan px-6 py-2.5 text-sm font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20"
+                                            className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-6 py-2 md:py-2.5 text-sm font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20"
                                         >
-                                            <span className="text-lg">▶</span> Play
+                                            <span className="text-base md:text-lg">▶</span> Play
                                         </Link>
                                         <Link
                                             href={`/anime/${featuredAnime.id}`}
-                                            className="flex items-center gap-2 rounded bg-neutral-500/50 px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white transition hover:bg-neutral-500/70 backdrop-blur-md"
+                                            className="flex items-center gap-2 rounded bg-neutral-500/50 px-4 md:px-6 py-2 md:py-2.5 text-xs md:text-sm font-bold text-white transition hover:bg-neutral-500/70 backdrop-blur-md"
                                         >
-                                            <span className="text-lg">ⓘ</span>
+                                            <span className="text-base md:text-lg">ⓘ</span>
                                             More Info
                                         </Link>
                                     </div>
@@ -226,7 +226,7 @@ export default function HomePage() {
                         </section>
                     )}
 
-                    <div className="relative z-10 -mt-16 space-y-12 pb-20">
+                    <div className="relative z-10 -mt-10 md:-mt-16 space-y-8 md:space-y-12 pb-20">
                         {continueWatching.data && continueWatching.data.length > 0 && (
                             <SectionRow title="Continue Watching">
                                 {continueWatching.data

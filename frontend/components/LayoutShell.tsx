@@ -33,7 +33,6 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
         return () => window.removeEventListener("scroll", onScroll);
     }, []);
 
-    // 1. Sync state FROM URL (External changes like Back button)
     useEffect(() => {
         const urlQuery = searchParams.get("q") || "";
         if (urlQuery !== searchQuery) {
@@ -47,7 +46,6 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
         }
     }, [searchParams, pathname]);
 
-    // 2. Push state TO URL (Debounced typing)
     useEffect(() => {
         const timer = setTimeout(() => {
             const urlQuery = searchParams.get("q") || "";
@@ -96,11 +94,11 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                     : "bg-gradient-to-b from-black/80 via-black/40 to-transparent"
                     }`}
             >
-                <div className="flex h-16 items-center justify-between px-[4%]">
-                    <div className="flex items-center gap-6">
+                <div className="flex h-12 md:h-16 items-center justify-between px-[4%]">
+                    <div className="flex items-center gap-4 md:gap-6">
                         <Link
                             href="/"
-                            className="text-ncyan text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none"
+                            className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none"
                         >
                             Filim
                         </Link>
@@ -125,8 +123,9 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                             })}
                         </nav>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <div className={`relative flex items-center transition-all duration-300 ${isSearchExpanded ? "w-64" : "w-8"}`}>
+                    <div className="flex items-center gap-3 md:gap-4">
+                        {/* Search — inline on desktop, full-width overlay on mobile */}
+                        <div className={`relative flex items-center transition-all duration-300 ${isSearchExpanded ? "md:w-64 w-[calc(100vw-7rem)]" : "w-8"}`}>
                             <button
                                 type="button"
                                 onClick={toggleSearch}
@@ -158,13 +157,13 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     onBlur={() => !searchQuery && setIsSearchExpanded(false)}
                                     placeholder="Titles, genres..."
-                                    className="w-full bg-black/60 border border-white/20 backdrop-blur-md rounded py-1 pl-2 pr-4 text-sm text-white focus:outline-none focus:border-white/40"
+                                    className="w-full bg-black/60 border border-white/20 backdrop-blur-md rounded py-1.5 md:py-1 pl-2 pr-4 text-sm text-white focus:outline-none focus:border-white/40"
                                 />
                             </form>
                         </div>
                         {profile && (
                             <Link href="/profiles" className="flex items-center gap-2 group">
-                                <div className="h-8 w-8 rounded bg-ncyan flex items-center justify-center text-sm font-bold text-black group-hover:ring-2 group-hover:ring-white transition-all">
+                                <div className="h-7 w-7 md:h-8 md:w-8 rounded bg-ncyan flex items-center justify-center text-xs md:text-sm font-bold text-black group-hover:ring-2 group-hover:ring-white transition-all">
                                     {profile.name.slice(0, 1).toUpperCase()}
                                 </div>
                             </Link>

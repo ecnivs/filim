@@ -9,6 +9,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 767px) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -48,6 +55,35 @@ body {
 
 .scrollbar-netflix::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* Row edge-fade overlays for scroll indication (desktop only) */
+.row-fade-left,
+.row-fade-right {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4%;
+  z-index: 30;
+  transition: opacity 0.3s ease;
+}
+
+.row-fade-left {
+  left: 0;
+  background: linear-gradient(to right, #141414 0%, transparent 100%);
+}
+
+.row-fade-right {
+  right: 0;
+  background: linear-gradient(to left, #141414 0%, transparent 100%);
+}
+
+@media (max-width: 767px) {
+  .row-fade-left,
+  .row-fade-right {
+    display: none;
+  }
 }
 
 input[type="range"] {

@@ -35,7 +35,7 @@ export function AnimeCard({
     rating,
     onToggleList,
     onSetRating,
-    widthClassName = "w-[calc(92vw/2)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
+    widthClassName = "w-[calc(92vw/3)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: AnimeCardProps) {
     const queryClient = useQueryClient();
     const router = useRouter();
@@ -61,23 +61,28 @@ export function AnimeCard({
     const [imageFailed, setImageFailed] = useState(false);
 
     const handleCardClick = () => {
-        router.push(playHref);
+        if (typeof window !== "undefined" && window.innerWidth < 768) {
+            router.push(infoHref);
+        } else {
+            router.push(playHref);
+        }
     };
 
     return (
         <div
-            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 group-hover/row-inner:opacity-30 hover:!opacity-100 hover:z-50 cursor-pointer select-none`}
+            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 md:group-hover/row-inner:opacity-30 md:hover:!opacity-100 md:hover:z-50 cursor-pointer select-none active:scale-[0.97] md:active:scale-100`}
             onClick={handleCardClick}
             onMouseEnter={prefetchDetails}
         >
-            <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out group-hover/card:scale-[1.25] group-hover/card:z-30 group-hover/card:delay-[100ms]">
+            {/* ── Desktop: hover-expand poster ── */}
+            <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out md:group-hover/card:scale-[1.25] md:group-hover/card:z-30 md:group-hover/card:delay-[100ms]">
                 {anime.poster_image_url && !imageFailed ? (
                     <Image
                         src={anime.poster_image_url}
                         alt={anime.title}
                         unoptimized
                         fill
-                        sizes="(max-width: 640px) 46vw, (max-width: 1024px) 23vw, 15vw"
+                        sizes="(max-width: 640px) 31vw, (max-width: 1024px) 23vw, 15vw"
                         className="object-cover"
                         onError={() => setImageFailed(true)}
                     />
@@ -87,18 +92,15 @@ export function AnimeCard({
                     </div>
                 )}
 
-                {/* Overlay elements only visible on hover */}
-                <div className="absolute inset-0 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 bg-gradient-to-t from-black/95 via-black/20 to-black/40 z-40">
-                    {/* Top Row: Branding */}
+                {/* ── Desktop-only hover overlay ── */}
+                <div className="absolute inset-0 opacity-0 hidden md:flex md:group-hover/card:opacity-100 transition-opacity duration-300 flex-col justify-between p-3 bg-gradient-to-t from-black/95 via-black/20 to-black/40 z-40">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1 scale-[0.8] origin-top-left">
                             <span className="text-ncyan font-black text-sm tracking-tighter">FILIM</span>
                         </div>
                     </div>
 
-                    {/* Bottom Section: Actions & Info */}
                     <div className="space-y-3">
-                        {/* Action Buttons */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <button
@@ -192,7 +194,6 @@ export function AnimeCard({
                             </button>
                         </div>
 
-                        {/* Metadata */}
                         <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
                             <p className="text-[0.65rem] font-black text-white leading-tight line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
                                 {anime.title}
@@ -211,10 +212,20 @@ export function AnimeCard({
                     </div>
                 </div>
 
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent h-1/3 opacity-100 sm:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none" />
-                <div className="absolute inset-x-0 bottom-0 p-2.5 opacity-100 sm:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none">
+                {/* ── Desktop-only: gradient + title at bottom (fades on hover) ── */}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent h-1/3 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 p-2.5 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none">
                     <p className="text-[0.75rem] font-semibold text-white line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{anime.title}</p>
                 </div>
+
+            </div>
+
+            {/* ── Mobile-only: title below the card ── */}
+            <div className="mt-1.5 md:hidden px-0.5">
+                <p className="text-[0.7rem] font-semibold text-neutral-200 line-clamp-2 leading-tight">{anime.title}</p>
+                {subtitle && (
+                    <p className="text-[0.6rem] text-neutral-500 mt-0.5">{subtitle}</p>
+                )}
             </div>
         </div>
     );

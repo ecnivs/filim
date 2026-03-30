@@ -85,3 +85,38 @@ async def continue_watching(
             )
         )
     return {"items": items}
+
+
+@router.get("/user/progress/{anime_id}")
+async def get_anime_progress(
+    anime_id: str,
+    request: Request,
+    x_device_token: str | None = Header(None, alias="X-Device-Token"),
+    x_profile_id: str | None = Header(None, alias="X-Profile-Id"),
+    service: SessionService = Depends(_get_session_service),
+) -> dict[str, list[ContinueWatchingItem]]:
+    rows: list[WatchProgressModel] = await service.get_anime_progress(
+        device_token=x_device_token,
+        client_ip=request.client.host if request.client else None,
+        profile_id=x_profile_id,
+        anime_id=anime_id,
+    )
+    items: list[ContinueWatchingItem] = []
+    for row in rows:
+        progress = (
+            row.position_seconds / row.duration_seconds
+            if row.duration_seconds > 0
+            else 0.0
+        )
+        items.append(
+            ContinueWatchingItem(
+                anime_id=row.anime_id,
+                episode=row.episode,
+                position_seconds=row.position_seconds,
+                duration_seconds=row.duration_seconds,
+                progress=progress,
+                anime_title=row.anime_title,
+                cover_image_url=row.cover_image_url,
+            )
+        )
+    return {"items": items}

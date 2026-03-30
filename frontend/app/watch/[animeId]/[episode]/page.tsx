@@ -102,7 +102,6 @@ export default function WatchPage() {
     }, []);
 
     useEffect(() => {
-        // Avoid calling the stream API with missing or placeholder route params.
         if (!hasValidParams || !routeIds) {
             setManifestUrl(null);
             setVariants([]);
@@ -144,8 +143,7 @@ export default function WatchPage() {
         }
 
         void fetchStream(selectedQualityId);
-        // Intentionally do NOT depend on `variants`, otherwise setting them will
-        // retrigger this effect and cause an infinite refetch/replay loop.
+
     }, [
         hasValidParams,
         routeIds?.animeId,
@@ -154,7 +152,6 @@ export default function WatchPage() {
         language
     ]);
 
-    // Fetch anime details once per show
     useEffect(() => {
         let cancelled = false;
         async function fetchDetails() {
@@ -169,7 +166,6 @@ export default function WatchPage() {
                 });
                 setAnimeDetails({ ...res.data, episodes: sortedEpisodes });
 
-                // Fetch seasons/series and merge with existing list for consistency
                 try {
                     const seriesRes = await api.get<{ items: { id: string; title: string }[] }>(
                         `/catalog/${routeIds.animeId}/series`
@@ -178,13 +174,11 @@ export default function WatchPage() {
 
                     setSeasons((prev) => {
                         const newList = [...seriesRes.data.items];
-                        // Ensure the current anime is in the list
                         if (!newList.find(s => s.id === res.data.id)) {
                             newList.unshift({ id: res.data.id, title: res.data.title });
                         }
 
-                        // If we have a previous list, merge it to avoid items disappearing 
-                        // when switching between related shows (e.g. Movie -> Series)
+
                         const combined = [...prev];
                         newList.forEach(item => {
                             if (!combined.find(c => c.id === item.id)) {
@@ -202,16 +196,15 @@ export default function WatchPage() {
         return () => { cancelled = true; };
     }, [routeIds?.animeId]);
 
-    // Fetch progress per episode
     useEffect(() => {
         let cancelled = false;
         async function fetchProgress() {
             if (!routeIds?.animeId || !routeIds?.episode) return;
             try {
-                const res = await api.get<{ items: ContinueWatchingItem[] }>("/user/continue-watching");
+                const res = await api.get<{ items: ContinueWatchingItem[] }>(`/user/progress/${routeIds.animeId}`);
                 if (cancelled) return;
                 const match = res.data.items.find(
-                    (item) => item.anime_id === routeIds.animeId && item.episode === routeIds.episode
+                    (item) => item.episode === routeIds.episode
                 );
                 setResumePositionSeconds(
                     match && match.position_seconds > 0 && match.position_seconds < match.duration_seconds
@@ -287,7 +280,6 @@ export default function WatchPage() {
                 audio_language_id: nextId
             })
             .catch((err) => {
-                // eslint-disable-next-line no-console
                 console.warn("Failed to update audio preference", err);
             });
     }, []);
@@ -353,8 +345,7 @@ export default function WatchPage() {
     }, [routeIds]);
 
     const handleBack = useCallback(() => {
-        // Use Next.js router to navigate back, which guarantees the layout
-        // history (like intercepted modals over the home page) is preserved.
+
         router.back();
     }, [router]);
 

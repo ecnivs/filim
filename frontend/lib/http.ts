@@ -12,7 +12,9 @@ class ApiClient {
         if (typeof window === "undefined") return "";
         let token = localStorage.getItem("filim_device_token");
         if (!token) {
-            token = crypto.randomUUID();
+            token = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+                ? crypto.randomUUID()
+                : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
             localStorage.setItem("filim_device_token", token);
         }
         return token;
@@ -78,7 +80,6 @@ class ApiClient {
         return this.request<T>(url, "POST", body, options);
     }
 
-    // Add other methods if needed (patch, delete, etc.)
 }
 
 export const api = new ApiClient();

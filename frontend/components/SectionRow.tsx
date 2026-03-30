@@ -48,30 +48,29 @@ export function SectionRow({
             left: direction === "left" ? -amount : amount,
             behavior: "smooth"
         });
-        // Check again after animation
         setTimeout(checkScroll, 500);
     };
 
     return (
         <>
-            <section className={`relative -my-10 group/row select-none transition-[z-index] duration-0 ${isOpen ? "z-50" : "z-40 hover:z-[60]"}`}>
-                <div className="flex items-center justify-between px-[4%] pb-3 pt-10 relative z-10">
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-sm sm:text-base md:text-lg font-bold text-white leading-none">{title}</h2>
+            <section className={`relative -my-6 md:-my-10 group/row select-none transition-[z-index] duration-0 ${isOpen ? "z-50" : "z-40 hover:z-[60]"}`}>
+                <div className="flex items-center justify-between px-[4%] pb-2 md:pb-3 pt-8 md:pt-10 relative z-10">
+                    <div className="flex items-center gap-2 md:gap-3">
+                        <h2 className="text-[0.9rem] md:text-base lg:text-lg font-bold text-white leading-none">{title}</h2>
                         {hasItems && (
                             <button
                                 type="button"
                                 onClick={() => setIsOpen(true)}
-                                className="text-[0.65rem] sm:text-xs text-ncyan font-medium"
+                                className="text-[0.6rem] md:text-xs text-ncyan font-medium hidden md:inline-block"
                             >
                                 {browseLabel} ›
                             </button>
                         )}
                     </div>
 
-                    {/* Fluid Scroll Indicator */}
+                    {/* Fluid Scroll Indicator — desktop only */}
                     {(showLeft || showRight) && (
-                        <div className="w-16 sm:w-24 h-[1.5px] bg-neutral-800 rounded-full relative overflow-hidden opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 mb-1 pointer-events-none">
+                        <div className="w-16 sm:w-24 h-[1.5px] bg-neutral-800 rounded-full relative overflow-hidden opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 mb-1 pointer-events-none hidden md:block">
                             <div
                                 className="h-full bg-neutral-500 transition-transform duration-75 rounded-full absolute top-0 left-0 w-[30%] origin-left"
                                 style={{ transform: `translateX(${scrollProgress * 2.3333}%)` }}
@@ -80,26 +79,30 @@ export function SectionRow({
                     )}
                 </div>
                 <div className="relative group/row">
+                    {/* Edge fade overlays — desktop only */}
+                    {showLeft && <div className="row-fade-left" />}
+                    {showRight && <div className="row-fade-right" />}
+
                     {/* Carousel container */}
                     <div
                         ref={scrollRef}
                         onScroll={checkScroll}
-                        className="flex gap-1.5 overflow-x-auto overflow-y-clip scrollbar-none px-[4%] py-10 -my-10 scroll-smooth"
+                        className="flex gap-2 md:gap-1.5 overflow-x-auto overflow-y-clip scrollbar-none px-[4%] py-6 md:py-10 -my-6 md:-my-10 scroll-smooth"
                     >
                         {children}
                     </div>
 
-                    {/* Scroll Buttons */}
+                    {/* Scroll Buttons — desktop only */}
                     <button
                         onClick={() => scroll("left")}
-                        className={`absolute left-0 top-0 bottom-0 z-40 flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showLeft ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
+                        className={`absolute left-0 top-0 bottom-0 z-40 hidden md:flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showLeft ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
                         aria-label="Scroll left"
                     >
                         <span className="text-3xl text-white hover:scale-125 transition-transform">‹</span>
                     </button>
                     <button
                         onClick={() => scroll("right")}
-                        className={`absolute right-0 top-0 bottom-0 z-40 flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showRight ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
+                        className={`absolute right-0 top-0 bottom-0 z-40 hidden md:flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showRight ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
                         aria-label="Scroll right"
                     >
                         <span className="text-3xl text-white hover:scale-125 transition-transform">›</span>
@@ -121,7 +124,7 @@ export function SectionRow({
                             </button>
                         </div>
                         <div className="relative flex-1 overflow-y-auto px-6 py-8">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-12 [&_>_div]:w-full">
+                            <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-12 [&_>_div]:w-full">
                                 {children}
                             </div>
                         </div>

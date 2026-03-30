@@ -40,9 +40,7 @@ class SessionService:
         """
         token = device_token or client_ip or "anonymous"
 
-        stmt: Select[tuple[Device]] = select(Device).where(
-            Device.mac_address == token
-        )
+        stmt: Select[tuple[Device]] = select(Device).where(Device.mac_address == token)
         result = await self.db.execute(stmt)
         device = result.scalar_one_or_none()
         if device is not None:
@@ -84,9 +82,14 @@ class SessionService:
         else:
             # Verify profile exists before using it to prevent FK constraint failures
             from app.models.profiles import Profile
-            result = await self.db.scalar(select(Profile.id).where(Profile.id == profile_id))
+
+            result = await self.db.scalar(
+                select(Profile.id).where(Profile.id == profile_id)
+            )
             if not result:
-                logger.warning("Stale profile_id %r, falling back to device-level", profile_id)
+                logger.warning(
+                    "Stale profile_id %r, falling back to device-level", profile_id
+                )
                 profile_id = None
 
         try:
@@ -148,7 +151,9 @@ class SessionService:
         from app.models.profiles import Profile
 
         if profile_id and is_valid_uuid(profile_id):
-            result = await self.db.scalar(select(Profile.id).where(Profile.id == profile_id))
+            result = await self.db.scalar(
+                select(Profile.id).where(Profile.id == profile_id)
+            )
             if not result:
                 profile_id = None
         else:
@@ -156,10 +161,19 @@ class SessionService:
 
         if profile_id is None:
             # Fallback for anon/stale-profile device-level history
-            device = await self.resolve_device(device_token=device_token, client_ip=client_ip)
-            history_filter = and_(WatchProgress.device_id == device.id, WatchProgress.profile_id.is_(None), WatchProgress.is_finished.is_(False))
+            device = await self.resolve_device(
+                device_token=device_token, client_ip=client_ip
+            )
+            history_filter = and_(
+                WatchProgress.device_id == device.id,
+                WatchProgress.profile_id.is_(None),
+                WatchProgress.is_finished.is_(False),
+            )
         else:
-            history_filter = and_(WatchProgress.profile_id == profile_id, WatchProgress.is_finished.is_(False))
+            history_filter = and_(
+                WatchProgress.profile_id == profile_id,
+                WatchProgress.is_finished.is_(False),
+            )
 
         latest_sub = (
             select(
@@ -206,3 +220,63 @@ class SessionService:
             )
         return items
 
+    async def get_anime_progress(
+        self,
+        device_token: str | None,
+        client_ip: str | None,
+        profile_id: str | None,
+        anime_id: str,
+    ) -> List[WatchProgressModel]:
+        def is_valid_uuid(val: str) -> bool:
+            try:
+                import uuid
+
+                uuid.UUID(str(val))
+                return True
+            except (ValueError, TypeError):
+                return False
+
+        from app.models.profiles import Profile
+
+        if profile_id and is_valid_uuid(profile_id):
+            result = await self.db.scalar(
+                select(Profile.id).where(Profile.id == profile_id)
+            )
+            if not result:
+                profile_id = None
+        else:
+            profile_id = None
+
+        if profile_id is None:
+            device = await self.resolve_device(
+                device_token=device_token, client_ip=client_ip
+            )
+            history_filter = and_(
+                WatchProgress.device_id == device.id,
+                WatchProgress.profile_id.is_(None),
+                WatchProgress.anime_id == anime_id,
+            )
+        else:
+            history_filter = and_(
+                WatchProgress.profile_id == profile_id,
+                WatchProgress.anime_id == anime_id,
+            )
+
+        stmt = select(WatchProgress).where(history_filter)
+        rows = (await self.db.execute(stmt)).scalars().all()
+
+        items: list[WatchProgressModel] = []
+        for wp in rows:
+            items.append(
+                WatchProgressModel(
+                    anime_id=wp.anime_id,
+                    episode=wp.episode,
+                    position_seconds=wp.position_seconds,
+                    duration_seconds=wp.duration_seconds,
+                    last_updated=wp.last_updated,
+                    is_finished=wp.is_finished,
+                    anime_title=None,
+                    cover_image_url=None,
+                )
+            )
+        return items
