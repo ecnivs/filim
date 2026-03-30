@@ -1,8 +1,6 @@
 from datetime import datetime
-
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from app.models.base import Base
 from app.models.profiles import Profile
 
@@ -18,13 +16,7 @@ class Device(Base):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (
-        # One logical device per MAC for now; can be relaxed later.
-        UniqueConstraint("mac_address", name="uq_devices_mac_address"),
-    )
-
-
-
+    __table_args__ = (UniqueConstraint("mac_address", name="uq_devices_mac_address"),)
 
 
 class WatchProgress(Base):

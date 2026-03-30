@@ -21,19 +21,12 @@ class CatalogService:
         if not results:
             return []
 
-        # Group by english_title if available, otherwise title.
-        # This helps merge entries that AllAnime lists separately for sub/dub
-        # or different seasons that we might want to group (though usually seasons
-        # stay separate unless titles are identical).
         merged: dict[str, AnimeSummaryModel] = {}
         for item in results:
             key = (item.english_title or item.title).lower().strip()
             if key not in merged:
                 merged[key] = item
             else:
-                # If we have a duplicate, we can try to merge metadata
-                # but for simplicity we'll just keep the first one found
-                # as the source usually orders by relevance.
                 pass
 
         return list(merged.values())
@@ -96,12 +89,8 @@ class CatalogService:
 
         details = await self.source.get_show_details(show_id=anime_id, mode=mode)
 
-        # Primary path: dedicated show details query returned something usable.
         summary: AnimeSummaryModel = details
         if not (details.title or details.episode_count):
-            # Fallback 1: if the caller knows which search term produced this ID
-            # (e.g. from the UI's search box), try to recover the matching entry
-            # from a fresh search against the upstream API.
             if search_query:
                 search_results = await self.source.search_shows(
                     query=search_query, mode=mode
@@ -113,8 +102,6 @@ class CatalogService:
                 else:
                     summary = details
             else:
-                # Fallback 2: broaden to a popular list so long-running or niche shows
-                # like Boruto still have a good chance of being included.
                 popular = await self.source.get_popular_shows(limit=400, mode=mode)
                 for item in popular:
                     if item.id == anime_id:
@@ -137,9 +124,6 @@ class CatalogService:
         if episodes:
             return episodes
 
-        # If the upstream episode list is empty but we know how many episodes
-        # exist from the show details, synthesize a simple numeric list so the
-        # UI can still present playable episodes.
         details = await self.get_show_details(
             anime_id=anime_id,
             mode=mode,
@@ -186,9 +170,6 @@ class CatalogService:
                 )
             return results
 
-        # Fallback: when no local stats/DB are available yet, ask the source
-        # adapter for a generic popular list so the home screen still has a
-        # 'Trending' row.
         return await self.source.get_popular_shows(limit=limit)
 
     async def get_series_lineup(
@@ -204,13 +185,11 @@ class CatalogService:
             return [root]
 
         lineup = [root]
-        # We only want to include clear seasons/sequels, not every
-        # single related entity.
+
         for rel in root.related_shows:
             rel_id = rel.get("showId")
             relation = (rel.get("relation") or "").lower()
 
-            # Filter for true seasons/sequels
             if relation not in [
                 "sequel",
                 "prequel",
@@ -229,6 +208,4 @@ class CatalogService:
             except Exception:
                 continue
 
-        # Sort by title or a hypothetical season number if we had one.
-        # For now, we'll keep the root first and then others.
         return lineup

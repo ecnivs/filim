@@ -18,6 +18,8 @@ thumbs.db
 .env.test.local
 .env.production.local
 *.log
+logs/
+backend/logs/
 .brain/
 .gemini/
 

@@ -1,19 +1,24 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Literal
-
+from typing import Literal, Optional
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models import ProfileListEntry, ProfileRating
+from app.models import ProfileAudioPreference, ProfileListEntry, ProfileRating
 
 
 class PreferenceModel(BaseModel):
     anime_id: str
     in_list: bool
     rating: Literal["like", "dislike"] | None
+
+    class Config:
+        from_attributes = True
+
+
+class AudioPreferenceModel(BaseModel):
+    profile_id: str
+    audio_language_id: str
 
     class Config:
         from_attributes = True
@@ -45,8 +50,7 @@ class PreferencesService:
         for entry in list_rows:
             in_list_map[entry.anime_id] = True
         for rating in rating_rows:
-            # Last write wins if duplicates somehow exist.
-            rating_map[rating.anime_id] = rating.rating  # type: ignore[assignment]
+            rating_map[rating.anime_id] = rating.rating
 
         anime_ids = set(in_list_map.keys()) | set(rating_map.keys())
         items: list[PreferenceModel] = []
@@ -140,5 +144,43 @@ class PreferencesService:
         return PreferenceModel(
             anime_id=preferred_anime_id,
             in_list=bool(list_entry),
-            rating=rating_entry.rating if rating_entry is not None else None,  # type: ignore[return-value]
+            rating=rating_entry.rating if rating_entry is not None else None,
         )
+
+    # Audio Preferences (Merged)
+    async def get_audio_preference_for_profile(
+        self, profile_id: str
+    ) -> Optional[AudioPreferenceModel]:
+        stmt = select(ProfileAudioPreference).where(
+            ProfileAudioPreference.profile_id == profile_id
+        )
+        row = (await self.db.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return None
+        return AudioPreferenceModel.model_validate(row)
+
+    async def set_audio_preference(
+        self, profile_id: str, audio_language_id: str | None
+    ) -> Optional[AudioPreferenceModel]:
+        if audio_language_id is None:
+            stmt = delete(ProfileAudioPreference).where(
+                ProfileAudioPreference.profile_id == profile_id
+            )
+            await self.db.execute(stmt)
+            await self.db.commit()
+            return None
+
+        stmt = select(ProfileAudioPreference).where(
+            ProfileAudioPreference.profile_id == profile_id
+        )
+        row = (await self.db.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            row = ProfileAudioPreference(
+                profile_id=profile_id, audio_language_id=audio_language_id
+            )
+            self.db.add(row)
+        else:
+            row.audio_language_id = audio_language_id
+
+        await self.db.commit()
+        return AudioPreferenceModel.model_validate(row)

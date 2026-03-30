@@ -1,10 +1,6 @@
 from __future__ import annotations
-
 from typing import Optional
-
 from pydantic import BaseModel
-
-from app.core.config import settings
 from app.core.cache import cache_response
 from app.sources import AllAnimeSourceAdapter, StreamCandidateModel
 from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverError
@@ -71,7 +67,7 @@ class StreamService:
 
         for cand in ordered:
             try:
-                resolved = self.resolver.resolve(
+                resolved = await self.resolver.resolve(
                     cand, preferred_quality=preferred_quality
                 )
                 chosen_source = cand

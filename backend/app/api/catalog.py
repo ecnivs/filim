@@ -1,10 +1,11 @@
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import CatalogService
 from app.db.session import get_db
-from app.sources import AnimeSummaryModel, EpisodeSummaryModel
+from app.sources import EpisodeSummaryModel
 
 
 class AnimeSummaryResponse(BaseModel):
@@ -17,7 +18,18 @@ class AnimeSummaryResponse(BaseModel):
     available_audio_languages: list[str] = []
 
     @classmethod
-    def from_source(cls, src: AnimeSummaryModel) -> "AnimeSummaryResponse":
+    def from_source(cls, src: Any) -> "AnimeSummaryResponse":
+        if isinstance(src, dict):
+            return cls(
+                id=src.get("id"),
+                title=src.get("title", ""),
+                episode_count=src.get("episode_count", 0),
+                poster_image_url=src.get("poster_image_url"),
+                synopsis=src.get("synopsis"),
+                tags=src.get("tags", []),
+                available_audio_languages=src.get("available_audio_languages", []),
+            )
+
         return cls(
             id=src.id,
             title=src.title,
@@ -98,10 +110,6 @@ async def get_anime_details(
         search_query=q,
     )
 
-    # Some search results can reference upstream IDs that no longer resolve
-    # via the dedicated show/episode APIs. When we cannot recover a usable
-    # title, episode count, or episode list, surface a 404 instead of an
-    # effectively empty details page.
     if (not details.title and details.episode_count == 0) and not episodes:
         raise HTTPException(status_code=404, detail="Anime not found")
 

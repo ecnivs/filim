@@ -1,15 +1,12 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 import uuid
 from datetime import datetime, timezone
 from typing import List
-
 from pydantic import BaseModel
 from sqlalchemy import Select, and_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models import Anime, Device, WatchProgress
 
 
@@ -30,8 +27,8 @@ class SessionService:
 
     async def resolve_device(
         self,
-        device_token: str | None,  # unused; kept for API compatibility
-        client_ip: str | None,  # unused; kept for API compatibility
+        device_token: str | None,
+        client_ip: str | None,
     ) -> Device:
         """Resolve a Device without relying on MAC addresses or tokens.
 
@@ -62,8 +59,6 @@ class SessionService:
         duration_seconds: float,
         is_finished: bool | None,
     ) -> None:
-        # Progress is always scoped to a profile; when no profile is active we
-        # skip persistence so different profiles cannot share a single history.
         def is_valid_uuid(val: str) -> bool:
             try:
                 uuid.UUID(str(val))
@@ -80,10 +75,6 @@ class SessionService:
                 client_ip=client_ip,
             )
         except ValueError:
-            # When we cannot associate the request with a known device (no
-            # token yet, ARP lookup failed, or token expired), skip persisting
-            # progress instead of failing the endpoint. Playback should remain
-            # functional even without resume support.
             return
         finished = bool(is_finished)
         if is_finished is None and duration_seconds > 0:
@@ -133,8 +124,7 @@ class SessionService:
         device = await self.resolve_device(
             device_token=device_token, client_ip=client_ip
         )
-        # Subquery: find the most recently updated row per anime_id so we only
-        # return one entry per series (the latest episode the user watched).
+
         from sqlalchemy import func
 
         latest_sub = (

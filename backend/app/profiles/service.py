@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
-
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models import Profile
 
 
@@ -69,8 +66,6 @@ class ProfileService:
         if name is not None:
             profile.name = name
 
-        # `pin` uses a sentinel so callers can distinguish between
-        # \"no change\" and \"clear\" (None).
         if pin is not object():
             if pin:
                 profile.pin_hash = _hash_pin(pin)

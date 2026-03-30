@@ -1,8 +1,6 @@
 from datetime import datetime
 from uuid import uuid4
-
-from sqlalchemy import DateTime, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, func, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -10,7 +8,7 @@ class Base(DeclarativeBase):
     """Base class for all ORM models."""
 
     id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        String(36),
         primary_key=True,
         default=lambda: str(uuid4()),
     )

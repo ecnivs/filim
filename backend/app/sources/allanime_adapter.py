@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any, List, Optional
 import json
 import re
-
 import httpx
 from pydantic import BaseModel
-
 from app.core.config import settings
 from app.core.cache import cache_response
 
@@ -20,8 +17,7 @@ class AnimeSummaryModel(BaseModel):
     synopsis: Optional[str] = None
     tags: list[str] = []
     poster_image_url: Optional[str] = None
-    # Stable audio language codes derived from AllAnime's translation types.
-    # We currently map `sub` → \"ja\" and `dub` → \"en\" when episodes exist.
+
     available_audio_languages: list[str] = []
     related_shows: list[dict[str, Any]] = []
     alt_names: list[str] = []
@@ -35,7 +31,7 @@ class EpisodeSummaryModel(BaseModel):
 
 class StreamCandidateModel(BaseModel):
     provider: str
-    kind: str  # "m3u8" or "mp4"
+    kind: str
     resolution: Optional[str] = None
     url: str
     has_subtitles: bool = False
@@ -65,9 +61,6 @@ class _AllAnimeClient:
             timeout=self.timeout,
         ) as client:
             try:
-                # Ani-cli uses a GET with URL-encoded "query" and JSON-string "variables"
-                # against `${allanime_api}/api`. `self.base_url` already points at the
-                # `/api` path, so we issue a GET to the empty relative URL.
                 response = await client.get(
                     "",
                     params={
@@ -91,11 +84,8 @@ import html
 def strip_html(text: str | None) -> str | None:
     if not text:
         return text
-    # Decoded HTML entities like &lt; and &gt;
     text = html.unescape(text)
-    # Replace <br> and similar with newlines
     text = re.sub(r"<(br\s*/?|/p)>", "\n", text, flags=re.IGNORECASE)
-    # Strip all other tags
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
@@ -109,7 +99,7 @@ class AllAnimeSourceAdapter:
             timeout=settings.http_timeout_seconds,
         )
 
-    @cache_response(ttl_seconds=3600)  # Cache search for 1 hour
+    @cache_response(ttl_seconds=3600, response_model=AnimeSummaryModel)
     async def search_shows(
         self,
         query: str,
@@ -169,7 +159,7 @@ class AllAnimeSourceAdapter:
             )
         return results
 
-    @cache_response(ttl_seconds=1800)  # Cache popular for 30 mins
+    @cache_response(ttl_seconds=1800, response_model=AnimeSummaryModel)
     async def get_popular_shows(
         self,
         limit: int = 20,
@@ -236,7 +226,7 @@ class AllAnimeSourceAdapter:
             )
         return results
 
-    @cache_response(ttl_seconds=3600)
+    @cache_response(ttl_seconds=3600, response_model=AnimeSummaryModel)
     async def get_show_details(
         self,
         show_id: str,
@@ -265,9 +255,6 @@ class AllAnimeSourceAdapter:
 
         primary_eps = episodes_detail.get(mode, []) or []
         if not primary_eps:
-            # Fallback to the opposite translation type (sub <-> dub) when the
-            # requested mode has no episodes. This mirrors typical streaming UX
-            # where a show may only have one translation available.
             fallback_mode = "dub" if mode == "sub" else "sub"
             primary_eps = episodes_detail.get(fallback_mode, []) or []
 
@@ -298,7 +285,7 @@ class AllAnimeSourceAdapter:
             alt_names=list(show.get("altNames") or []),
         )
 
-    @cache_response(ttl_seconds=3600)
+    @cache_response(ttl_seconds=3600, response_model=EpisodeSummaryModel)
     async def get_episode_list(
         self,
         show_id: str,
@@ -317,12 +304,9 @@ class AllAnimeSourceAdapter:
 
         detail = episodes_detail.get(mode, []) or []
         if not detail:
-            # If there are no episodes for the requested translation type, fall
-            # back to the other one so the UI still has something to show.
             fallback_mode = "dub" if mode == "sub" else "sub"
             detail = episodes_detail.get(fallback_mode, []) or []
 
-        # `detail` is expected to be a list of episode identifiers (strings or numbers).
         numbers = sorted({str(ep) for ep in detail})
         return [EpisodeSummaryModel(number=n) for n in numbers]
 
@@ -355,9 +339,6 @@ class AllAnimeSourceAdapter:
         episode_data = data.get("episode") or {}
         source_urls = episode_data.get("sourceUrls") or []
 
-        # When the requested translation type has no streams, retry once with
-        # the opposite mode so episodes that only exist as sub *or* dub still
-        # play.
         if not source_urls:
             fallback_mode = "dub" if mode == "sub" else "sub"
             variables = {
@@ -373,9 +354,6 @@ class AllAnimeSourceAdapter:
         for src in source_urls:
             source_name = (src.get("sourceName") or "").lower()
 
-            # Prefer the provider's explicit download URL when available, since
-            # it usually points at a direct MP4 or HLS manifest. Fall back to
-            # the raw `sourceUrl` token otherwise.
             downloads = src.get("downloads") or {}
             raw_url = downloads.get("downloadUrl") or src.get("sourceUrl") or ""
 
@@ -409,8 +387,6 @@ class AllAnimeSourceAdapter:
         without copying its code. It should be adapted as protocols evolve.
         """
 
-        # For now we assume `encoded` is already a usable URL; additional
-        # decoding rules can be layered here per provider when needed.
         url = encoded
         kind = "m3u8" if ".m3u8" in url else "mp4"
 

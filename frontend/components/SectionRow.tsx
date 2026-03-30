@@ -24,12 +24,10 @@ export function SectionRow({
         const el = scrollRef.current;
         if (!el) return;
 
-        // Visibility of arrows
         setShowLeft(el.scrollLeft > 5);
         const scrollable = el.scrollWidth - el.clientWidth;
         setShowRight(el.scrollLeft < scrollable - 5);
 
-        // Update scroll progress (0 to 100)
         if (scrollable > 0) {
             const progress = (el.scrollLeft / scrollable) * 100;
             setScrollProgress(progress);

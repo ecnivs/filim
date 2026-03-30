@@ -1,11 +1,8 @@
 from __future__ import annotations
-
 from typing import List
-
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models import Anime, AnimeStats
 
 

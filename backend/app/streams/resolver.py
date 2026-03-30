@@ -1,11 +1,8 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Optional
-import subprocess
-
+import asyncio
 import httpx
-
 from app.core.config import settings
 from app.sources import StreamCandidateModel
 
@@ -13,7 +10,7 @@ from app.sources import StreamCandidateModel
 @dataclass
 class ResolvedStream:
     url: str
-    kind: str  # "hls" or "file"
+    kind: str
     resolution: Optional[str] = None
 
 
@@ -23,16 +20,15 @@ class StreamResolverError(RuntimeError):
 
 class StreamResolver:
     """Resolve provider URLs into direct media URLs using external tools.
-
-    This mirrors ani-cli's behaviour of handing embed/download pages off to
-    tools like mpv/yt-dlp, but does so server-side so the frontend player can
-    always receive a browser-playable URL.
+    
+    Refactored to be fully asynchronous to prevent event loop blocking on
+    platforms like Raspberry Pi.
     """
 
     def __init__(self, yt_dlp_binary: str = "yt-dlp") -> None:
         self.yt_dlp_binary = yt_dlp_binary
 
-    def resolve(
+    async def resolve(
         self, candidate: StreamCandidateModel, preferred_quality: Optional[str] = None
     ) -> ResolvedStream:
         """Return a direct media URL for a given provider candidate.
@@ -47,11 +43,6 @@ class StreamResolver:
 
         url = candidate.url
 
-        # 1) AllAnime /clock.json fast path (mirrors ani-cli's provider flow)
-        # -------------------------------------------------------------------
-        # When the URL points at AllAnime's clock endpoint, resolve it to a
-        # direct MP4/HLS stream using the JSON API instead of delegating to
-        # provider-specific pages.
         if "apivtwo/clock" in url:
             clock_url = url
             if "/clock/dr" in clock_url:
@@ -60,7 +51,7 @@ class StreamResolver:
                 clock_url = clock_url.replace("/clock", "/clock.json")
 
             try:
-                with httpx.Client(
+                async with httpx.AsyncClient(
                     timeout=30.0,
                     headers={
                         "User-Agent": (
@@ -70,7 +61,7 @@ class StreamResolver:
                         "Referer": settings.allanime_referer,
                     },
                 ) as client:
-                    resp = client.get(clock_url)
+                    resp = await client.get(clock_url)
                     resp.raise_for_status()
             except httpx.HTTPError as exc:
                 raise StreamResolverError(
@@ -82,8 +73,6 @@ class StreamResolver:
             if not links:
                 raise StreamResolverError("AllAnime clock JSON contained no links")
 
-            # Prefer links with an explicit numeric resolution when present;
-            # otherwise fall back to the first entry.
             def resolution_score(entry: dict) -> int:
                 label = str(entry.get("resolutionStr") or "").lower()
                 for token in ("2160", "1440", "1080", "720", "480", "360"):
@@ -103,59 +92,55 @@ class StreamResolver:
                 resolution=chosen_entry.get("resolutionStr") or candidate.resolution,
             )
 
-        # 2) Direct media URL fast path
-        # -----------------------------
-        # If the URL already looks like a direct media resource, bypass yt-dlp.
         if any(
             ext in url for ext in (".m3u8", ".mp4", ".webm", ".mkv", ".avi", ".mov")
         ):
             kind = "hls" if ".m3u8" in url else "file"
             return ResolvedStream(url=url, kind=kind, resolution=candidate.resolution)
 
-        # 3) Generic fallback via yt-dlp
-        # ------------------------------
-        # For legacy or less common providers, delegate to yt-dlp to extract
-        # the best available media URL.
         format_selector = "best"
         if preferred_quality:
-            # Basic mapping: prefer streams at or below the requested height.
             h = "".join(ch for ch in preferred_quality if ch.isdigit())
             if h:
                 format_selector = f"best[height<={h}]/best"
 
         cmd = [
             self.yt_dlp_binary,
-            "-g",  # print direct URL(s)
+            "-g",
             "-f",
             format_selector,
             url,
         ]
 
         try:
-            proc = subprocess.run(
-                cmd,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=60,
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutExpired as exc:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            raise StreamResolverError(f"yt-dlp resolution timed out: {exc}") from exc
+        except (OSError, Exception) as exc:
             raise StreamResolverError(
-                f"yt-dlp failed to start or timed out: {exc}"
+                f"yt-dlp failed to start or error occurred: {exc}"
             ) from exc
 
         if proc.returncode != 0:
-            stderr = (proc.stderr or "").strip()
+            err_msg = (stderr.decode() or "").strip()
             raise StreamResolverError(
-                f"yt-dlp failed with code {proc.returncode}: {stderr}"
+                f"yt-dlp failed with code {proc.returncode}: {err_msg}"
             )
 
-        stdout = (proc.stdout or "").strip()
-        if not stdout:
+        out_text = (stdout.decode() or "").strip()
+        if not out_text:
             raise StreamResolverError("yt-dlp returned no URLs")
 
-        # yt-dlp can output multiple URLs separated by newlines; pick the first.
-        resolved_url = stdout.splitlines()[0].strip()
+        resolved_url = out_text.splitlines()[0].strip()
         if not resolved_url:
             raise StreamResolverError("yt-dlp produced an empty URL")
 

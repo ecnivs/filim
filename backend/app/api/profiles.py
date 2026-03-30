@@ -88,6 +88,5 @@ async def verify_pin(
 ) -> dict[str, bool]:
     valid = await service.verify_pin(profile_id, pin=body.pin)
     if not valid:
-        # Do not leak whether the profile exists vs wrong PIN.
         raise HTTPException(status_code=403, detail="Invalid PIN")
     return {"valid": True}

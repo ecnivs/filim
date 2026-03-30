@@ -1,9 +1,14 @@
-from fastapi import FastAPI
+import time
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.logger import setup_logging
+import logging
 
 
 def create_app() -> FastAPI:
     """Application factory for the Filim backend."""
+
+    setup_logging()
 
     app = FastAPI(
         title="Filim Backend",
@@ -12,7 +17,19 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json",
     )
 
-    # CORS – liberal for LAN usage by default, tighten in production if needed.
+    @app.middleware("http")
+    async def log_request_time(request: Request, call_next):
+        start_time = time.perf_counter()
+        response = await call_next(request)
+        process_time = (time.perf_counter() - start_time) * 1000
+
+        logging.info(
+            f"{request.method} {request.url.path} - "
+            f"Status: {response.status_code} - "
+            f"Time: {process_time:.2f}ms"
+        )
+        return response
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -21,8 +38,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Routers will be imported and mounted here to avoid circular imports.
-    from app.api import router as api_router  # type: ignore[import-not-found]
+    from app.api import router as api_router
 
     app.include_router(api_router, prefix="/api/v1")
 

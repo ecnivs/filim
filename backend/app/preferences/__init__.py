@@ -1,3 +1,3 @@
-from app.preferences.service import PreferenceModel, PreferencesService
+from app.preferences.service import AudioPreferenceModel, PreferenceModel, PreferencesService
 
-__all__ = ["PreferenceModel", "PreferencesService"]
+__all__ = ["AudioPreferenceModel", "PreferenceModel", "PreferencesService"]

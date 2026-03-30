@@ -1,6 +1,6 @@
+from __future__ import annotations
 from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from app.models.base import Base
 from app.models.profiles import Profile
 
@@ -35,8 +35,6 @@ class ProfileRating(Base):
         index=True,
     )
     anime_id: Mapped[str] = mapped_column(String, nullable=False)
-    # Simple string rating; constrained at the service/API layer to
-    # \"like\" / \"dislike\" values.
     rating: Mapped[str] = mapped_column(String, nullable=False)
 
     profile: Mapped[Profile] = relationship(back_populates="ratings")
@@ -46,5 +44,25 @@ class ProfileRating(Base):
             "profile_id",
             "anime_id",
             name="uq_profile_rating_profile_anime",
+        ),
+    )
+
+
+class ProfileAudioPreference(Base):
+    __tablename__ = "profile_audio_preferences"
+
+    profile_id: Mapped[str] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    audio_language_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    profile: Mapped[Profile] = relationship(back_populates="audio_preferences")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "profile_id",
+            name="uq_profile_audio_pref_profile",
         ),
     )

@@ -28,7 +28,6 @@ def _resolve_language_and_mode(
     if language in {"ja", "en"}:
         resolved_language = language
     else:
-        # Default to Japanese audio for \"sub\" and English audio for \"dub\".
         resolved_language = "en" if mode == "dub" else "ja"
 
     effective_mode = "dub" if resolved_language == "en" else "sub"
@@ -60,15 +59,11 @@ async def get_episode_stream(
             device_token=device_token,
         )
     except RuntimeError as exc:
-        # Surface a clean API error instead of a 500 traceback when the
-        # upstream source has no playable streams for this episode.
         raise HTTPException(
             status_code=404,
             detail=str(exc) or "No stream candidates available",
         ) from exc
 
-    # Expose a single logical audio language using stable codes so the
-    # frontend can present explicit English/Japanese labels.
     if resolved_language == "en":
         audio_label = "English"
     else:
