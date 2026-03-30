@@ -1,13 +1,16 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List
 from pydantic import BaseModel
 from sqlalchemy import Select, and_, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Anime, Device, WatchProgress
+
+logger = logging.getLogger(__name__)
 
 
 class WatchProgressModel(BaseModel):
@@ -30,22 +33,32 @@ class SessionService:
         device_token: str | None,
         client_ip: str | None,
     ) -> Device:
-        """Resolve a Device without relying on MAC addresses or tokens.
+        """Resolve a Device using an explicit token or fallback identification.
 
-        For now we treat all requests as coming from a single anonymous device so
-        that "continue watching" works without any per-user tracking or ARP
-        lookups. This keeps the rest of the session API stable while avoiding
-        MAC-based identification.
+        Commits the device immediately so it is guaranteed to exist
+        for foreign-key checks in the same or subsequent transactions.
         """
+        token = device_token or client_ip or "anonymous"
+
         stmt: Select[tuple[Device]] = select(Device).where(
-            Device.mac_address == "anonymous"
+            Device.mac_address == token
         )
         result = await self.db.execute(stmt)
         device = result.scalar_one_or_none()
+        if device is not None:
+            return device
+
+        new_device = Device(mac_address=token, device_name=None)
+        self.db.add(new_device)
+        try:
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+
+        result = await self.db.execute(stmt)
+        device = result.scalar_one_or_none()
         if device is None:
-            device = Device(mac_address="anonymous", device_name=None)
-            self.db.add(device)
-            await self.db.flush()
+            raise ValueError(f"Could not resolve device for token {token!r}")
         return device
 
     async def update_progress(
@@ -67,42 +80,55 @@ class SessionService:
                 return False
 
         if not profile_id or not is_valid_uuid(profile_id):
-            return
+            profile_id = None
+        else:
+            # Verify profile exists before using it to prevent FK constraint failures
+            from app.models.profiles import Profile
+            result = await self.db.scalar(select(Profile.id).where(Profile.id == profile_id))
+            if not result:
+                logger.warning("Stale profile_id %r, falling back to device-level", profile_id)
+                profile_id = None
 
         try:
             device = await self.resolve_device(
                 device_token=device_token,
                 client_ip=client_ip,
             )
-        except ValueError:
+        except (ValueError, Exception) as exc:
+            logger.warning("Could not resolve device: %s", exc)
             return
+
         finished = bool(is_finished)
         if is_finished is None and duration_seconds > 0:
             ratio = position_seconds / duration_seconds
             finished = ratio >= 0.9
 
         now = datetime.now(timezone.utc)
-        stmt = insert(WatchProgress).values(
-            device_id=device.id,
-            profile_id=profile_id,
-            anime_id=anime_id,
-            episode=episode,
-            position_seconds=position_seconds,
-            duration_seconds=duration_seconds,
-            is_finished=finished,
-            last_updated=now,
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["device_id", "profile_id", "anime_id", "episode"],
-            set_={
-                "position_seconds": position_seconds,
-                "duration_seconds": duration_seconds,
-                "is_finished": finished,
-                "last_updated": now,
-            },
-        )
-        await self.db.execute(stmt)
-        await self.db.commit()
+        try:
+            stmt = insert(WatchProgress).values(
+                device_id=device.id,
+                profile_id=profile_id,
+                anime_id=anime_id,
+                episode=episode,
+                position_seconds=position_seconds,
+                duration_seconds=duration_seconds,
+                is_finished=finished,
+                last_updated=now,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["device_id", "profile_id", "anime_id", "episode"],
+                set_={
+                    "position_seconds": position_seconds,
+                    "duration_seconds": duration_seconds,
+                    "is_finished": finished,
+                    "last_updated": now,
+                },
+            )
+            await self.db.execute(stmt)
+            await self.db.commit()
+        except Exception as exc:
+            logger.error("Failed to persist watch progress: %s", exc)
+            await self.db.rollback()
 
     async def get_continue_watching(
         self,
@@ -118,27 +144,29 @@ class SessionService:
             except (ValueError, TypeError):
                 return False
 
-        if not profile_id or not is_valid_uuid(profile_id):
-            return []
-
-        device = await self.resolve_device(
-            device_token=device_token, client_ip=client_ip
-        )
-
         from sqlalchemy import func
+        from app.models.profiles import Profile
+
+        if profile_id and is_valid_uuid(profile_id):
+            result = await self.db.scalar(select(Profile.id).where(Profile.id == profile_id))
+            if not result:
+                profile_id = None
+        else:
+            profile_id = None
+
+        if profile_id is None:
+            # Fallback for anon/stale-profile device-level history
+            device = await self.resolve_device(device_token=device_token, client_ip=client_ip)
+            history_filter = and_(WatchProgress.device_id == device.id, WatchProgress.profile_id.is_(None), WatchProgress.is_finished.is_(False))
+        else:
+            history_filter = and_(WatchProgress.profile_id == profile_id, WatchProgress.is_finished.is_(False))
 
         latest_sub = (
             select(
                 WatchProgress.anime_id,
                 func.max(WatchProgress.last_updated).label("max_updated"),
             )
-            .where(
-                and_(
-                    WatchProgress.device_id == device.id,
-                    WatchProgress.profile_id == profile_id,
-                    WatchProgress.is_finished.is_(False),
-                )
-            )
+            .where(history_filter)
             .group_by(WatchProgress.anime_id)
             .subquery()
         )
@@ -153,13 +181,7 @@ class SessionService:
                 ),
             )
             .join(Anime, Anime.source_id == WatchProgress.anime_id, isouter=True)
-            .where(
-                and_(
-                    WatchProgress.device_id == device.id,
-                    WatchProgress.profile_id == profile_id,
-                    WatchProgress.is_finished.is_(False),
-                )
-            )
+            .where(history_filter)
             .order_by(WatchProgress.last_updated.desc())
             .limit(limit)
         )
@@ -183,3 +205,4 @@ class SessionService:
                 )
             )
         return items
+
