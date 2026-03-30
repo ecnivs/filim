@@ -7,9 +7,7 @@
 *.log
 logs/
 backend/logs/
-
-.brain/
-.gemini/
+dev-docs/
 
 # Python
 __pycache__/
@@ -30,4 +28,3 @@ node_modules/
 out/
 build/
 .vercel/
-

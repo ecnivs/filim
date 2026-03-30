@@ -1,0 +1,40 @@
+Metadata-Version: 2.4
+Name: filim-backend
+Version: 0.1.0
+Summary: LAN-only streaming backend reimplementing ani-cli behavior using FastAPI.
+Author-email: Filim <dev@example.local>
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: httpx[http2]>=0.27.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: pydantic-settings>=2.3.0
+Requires-Dist: SQLAlchemy>=2.0.30
+Requires-Dist: asyncpg>=0.30.0
+Requires-Dist: alembic>=1.13.0
+Requires-Dist: redis>=5.0.0
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: m3u8>=5.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: httpx>=0.27.0; extra == "dev"
+
+## Filim backend
+
+Python FastAPI backend for the LAN-only streaming platform. It reimplements the behavior of the original `ani-cli` script as HTTP APIs and integrates with a local HLS media pipeline.
+
+### Structure
+
+- `app/main.py` – FastAPI application entrypoint.
+- `app/core/config.py` – configuration and settings.
+- `app/db/session.py` – database engine and session factory.
+- `app/models/` – SQLAlchemy models for devices, watch progress, and catalog.
+- `app/sources/` – adapters for external content sources (e.g. AllAnime).
+- `app/streams/` – stream resolution and HLS integration.
+- `app/sessions/` – MAC-based device identity and watch progress services.
+- `app/recommendations/` – rule-based recommendation logic.
+- `app/api/` – FastAPI routers exposing HTTP endpoints.
+
+The backend is designed to run behind a reverse proxy (e.g. Nginx or Caddy) that also serves the `/hls/` directory for HLS assets.
+
