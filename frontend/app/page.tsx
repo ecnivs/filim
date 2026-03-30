@@ -8,7 +8,6 @@ import { AnimeCard, type AnimeSummaryCard as AnimeSummary } from "@/components/A
 import { SectionRow } from "@/components/SectionRow";
 import { useSearchParams } from "next/navigation";
 import { ContinueCard } from "@/components/ContinueCard";
-import { formatTime } from "@/lib/utils";
 
 type ContinueWatchingItem = {
     anime_id: string;
@@ -48,7 +47,9 @@ export default function HomePage() {
                 "/user/continue-watching"
             );
             return res.data.items;
-        }
+        },
+        staleTime: 0,
+        refetchOnMount: "always",
     });
 
     const preferences = useQuery({

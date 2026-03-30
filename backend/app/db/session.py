@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy import event
 from app.core.config import settings
 
 
@@ -24,6 +25,18 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """Optimize SQLite for low-latency LAN performance."""
+    if settings.database_url.startswith("sqlite"):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-64000")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

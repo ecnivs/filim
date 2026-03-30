@@ -1,4 +1,5 @@
 import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.logger import setup_logging
@@ -10,11 +11,20 @@ def create_app() -> FastAPI:
 
     setup_logging()
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        from app.db.cache_store import cache_client
+
+        await cache_client.start_cleanup()
+        yield
+        await cache_client.stop_cleanup()
+
     app = FastAPI(
         title="Filim Backend",
         version="0.1.0",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
 
     @app.middleware("http")

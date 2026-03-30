@@ -20,10 +20,13 @@ class StreamResolverError(RuntimeError):
 
 class StreamResolver:
     """Resolve provider URLs into direct media URLs using external tools.
-    
+
     Refactored to be fully asynchronous to prevent event loop blocking on
-    platforms like Raspberry Pi.
+    platforms like Raspberry Pi. Includes a semaphore to limit heavy
+    subprocess concurrency.
     """
+
+    _semaphore = asyncio.Semaphore(8)
 
     def __init__(self, yt_dlp_binary: str = "yt-dlp") -> None:
         self.yt_dlp_binary = yt_dlp_binary
@@ -113,12 +116,13 @@ class StreamResolver:
         ]
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            async with self._semaphore:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
         except asyncio.TimeoutExpired as exc:
             try:
                 proc.kill()

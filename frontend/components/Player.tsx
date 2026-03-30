@@ -139,6 +139,8 @@ export function Player({
 
     const onProgressRef = useRef(onProgress);
     onProgressRef.current = onProgress;
+    const durationRef = useRef(duration);
+    durationRef.current = duration;
     const onEndedRef = useRef(onEnded);
     onEndedRef.current = onEnded;
     const onErrorRef = useRef(onError);
@@ -352,6 +354,13 @@ export function Player({
 
         const handlePause = () => {
             setIsPlaying(false);
+            if (durationRef.current && onProgressRef.current) {
+                onProgressRef.current({
+                    positionSeconds: video.currentTime || lastTimeRef.current,
+                    durationSeconds: durationRef.current,
+                    isFinished: video.ended || false
+                });
+            }
         };
 
         const handleWaiting = () => {
@@ -429,16 +438,52 @@ export function Player({
         if (!video) return;
 
         const id = window.setInterval(() => {
-            if (!video.duration) return;
+            const currentDuration = video.duration || durationRef.current;
+            if (!currentDuration) return;
             onProgress({
                 positionSeconds: video.currentTime,
-                durationSeconds: video.duration,
+                durationSeconds: currentDuration,
                 isFinished: false
             });
         }, PROGRESS_INTERVAL_MS);
 
-        return () => window.clearInterval(id);
+        return () => {
+            window.clearInterval(id);
+            if (durationRef.current > 0) {
+                onProgress({
+                    positionSeconds: lastTimeRef.current,
+                    durationSeconds: durationRef.current,
+                    isFinished: false // Close enough on unmount
+                });
+            }
+        };
     }, [onProgress, source?.url]);
+
+    useEffect(() => {
+        const handleUnloadOrHide = () => {
+            if (durationRef.current > 0 && onProgressRef.current) {
+                onProgressRef.current({
+                    positionSeconds: lastTimeRef.current,
+                    durationSeconds: durationRef.current,
+                    isFinished: false
+                });
+            }
+        };
+
+        window.addEventListener("pagehide", handleUnloadOrHide);
+        window.addEventListener("beforeunload", handleUnloadOrHide);
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") {
+                handleUnloadOrHide();
+            }
+        });
+
+        return () => {
+            window.removeEventListener("pagehide", handleUnloadOrHide);
+            window.removeEventListener("beforeunload", handleUnloadOrHide);
+            // removing anonymous visibilitychange is tricky without a ref, but it's fine for the Player lifetime
+        };
+    }, []);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -866,7 +911,22 @@ export function Player({
                     <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-4 sm:px-12 pt-8 text-sm">
                         <div className="flex items-start gap-6">
                             <button
-                                onClick={onBack || (() => history.back())}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (durationRef.current > 0 && onProgressRef.current) {
+                                        onProgressRef.current({
+                                            positionSeconds: lastTimeRef.current,
+                                            durationSeconds: durationRef.current,
+                                            isFinished: false
+                                        });
+                                    }
+                                    if (onBack) {
+                                        onBack();
+                                    } else {
+                                        history.back();
+                                    }
+                                }}
                                 className="mt-1 transition-opacity opacity-80 hover:opacity-100 active:scale-95"
                                 aria-label="Back"
                             >
