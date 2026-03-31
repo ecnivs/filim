@@ -136,7 +136,7 @@ class CatalogService:
 
         return episodes
 
-    async def get_trending(self, limit: int = 20) -> list[AnimeSummaryModel]:
+    async def get_trending(self, limit: int = 20, page: int = 1) -> list[AnimeSummaryModel]:
         """Return trending shows based on AnimeStats and source metadata."""
 
         try:
@@ -146,6 +146,7 @@ class CatalogService:
                 .order_by(
                     AnimeStats.is_trending.desc(), AnimeStats.device_count_30d.desc()
                 )
+                .offset((page - 1) * limit)
                 .limit(limit)
             )
             rows: Sequence[tuple[AnimeStats, Anime]] = (
@@ -169,7 +170,17 @@ class CatalogService:
                 )
             return results
 
-        return await self.source.get_popular_shows(limit=limit)
+        return await self.source.get_popular_shows(limit=limit, page=page)
+
+    async def get_shows(self, limit: int = 40, page: int = 1, mode: str = "sub") -> list[AnimeSummaryModel]:
+        """Return popular TV shows (more than 1 episode)."""
+        popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
+        return [s for s in popular if (s.episode_count or 0) > 1]
+
+    async def get_movies(self, limit: int = 40, page: int = 1, mode: str = "sub") -> list[AnimeSummaryModel]:
+        """Return popular Movies (exactly 1 episode)."""
+        popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
+        return [s for s in popular if (s.episode_count or 0) == 1]
 
     async def get_series_lineup(
         self, anime_id: str, mode: str = "sub"

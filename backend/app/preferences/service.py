@@ -64,6 +64,13 @@ class PreferencesService:
             )
         return items
 
+    async def get_list_anime_ids(self, profile_id: str) -> list[str]:
+        stmt = select(ProfileListEntry.anime_id).where(
+            ProfileListEntry.profile_id == profile_id
+        )
+        rows = (await self.db.execute(stmt)).scalars().all()
+        return list(rows)
+
     async def set_in_list(
         self,
         profile_id: str,

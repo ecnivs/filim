@@ -45,6 +45,17 @@ async def list_profiles(
     return {"items": [ProfileResponse.from_model(p) for p in profiles]}
 
 
+@router.get("/{profile_id}")
+async def get_profile(
+    profile_id: str,
+    service: ProfileService = Depends(_get_profile_service),
+) -> ProfileResponse:
+    profile = await service.get_profile(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return ProfileResponse.from_model(profile)
+
+
 @router.post("")
 async def create_profile(
     body: CreateProfileBody,

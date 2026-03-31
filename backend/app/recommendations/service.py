@@ -215,7 +215,10 @@ class RecommendationService:
     async def get_discovery_sections(
         self, page: int = 1, limit: int = 3, profile_id: str | None = None
     ) -> List[RecommendationSectionModel]:
-        """Fetch discovery sections (genres) for infinite scrolling."""
+        """Fetch discovery sections (genres) for infinite scrolling.
+        
+        Tries to skip empty/failed genres to ensure each 'page' has content.
+        """
         exclude_genres = []
         try:
             for_you = await self.get_for_you_section(profile_id=profile_id)
@@ -234,47 +237,51 @@ class RecommendationService:
             pass
 
         genres = await self._get_dynamic_genres(exclude=exclude_genres)
-
-        start_idx = (page - 1) * limit
-        candidates = genres[start_idx : start_idx + limit]
-
-        if not candidates:
-            return []
-
-        search_tasks = [
-            self.catalog.search(query=genre, page=1) for genre in candidates
-        ]
-        search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
-
+        
+        # Robust discovery: iterate through genres until we fill 'limit' sections or run out of genres.
         sections: list[RecommendationSectionModel] = []
         seen_ids: set[str] = set()
+        
+        # We use a window of genres to try to find content.
+        batch_size = limit * 5 # Try up to 5x the limit to find valid sections
+        start_idx = (page - 1) * limit
+        genre_pool = genres[start_idx : start_idx + batch_size]
+        
+        if not genre_pool:
+            return []
 
-        for i, genre in enumerate(candidates):
-            results = search_results[i]
-            if isinstance(results, BaseException) or not results:
-                continue
+        # Process in chunks to find populated sections
+        for genre in genre_pool:
+            if len(sections) >= limit:
+                break
+                
+            try:
+                results = await self.catalog.search(query=genre, page=1)
+                if not results:
+                    continue
 
-            genre_lower = genre.lower()
-            filtered = [
-                r
-                for r in results
-                if any(tag.lower() == genre_lower for tag in r.tags)
-                and r.id not in seen_ids
-            ]
+                genre_lower = genre.lower()
+                filtered = [
+                    r
+                    for r in results
+                    if any(tag.lower() == genre_lower for tag in r.tags)
+                    and r.id not in seen_ids
+                ]
 
-            if filtered:
-                section_items = filtered[:20]
-                for item in section_items:
-                    if item.id:
+                if filtered:
+                    section_items = [AnimeSummaryModel.from_source(r) for r in filtered[:20]]
+                    for item in section_items:
                         seen_ids.add(item.id)
 
-                sections.append(
-                    RecommendationSectionModel(
-                        id=f"genre_{genre.lower().replace(' ', '_')}_p{page}",
-                        title=f"{genre} Anime",
-                        items=[AnimeSummaryModel.from_source(r) for r in section_items],
+                    sections.append(
+                        RecommendationSectionModel(
+                            id=f"genre_{genre.lower().replace(' ', '_')}_p{page}",
+                            title=f"{genre} Anime",
+                            items=section_items,
+                        )
                     )
-                )
+            except Exception:
+                continue
 
         return sections
 

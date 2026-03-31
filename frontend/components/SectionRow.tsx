@@ -61,7 +61,7 @@ export function SectionRow({
                             <button
                                 type="button"
                                 onClick={() => setIsOpen(true)}
-                                className="text-[0.6rem] md:text-xs text-ncyan font-medium hidden md:inline-block"
+                                className="text-[0.6rem] md:text-xs text-ncyan font-medium inline-block"
                             >
                                 {browseLabel} ›
                             </button>

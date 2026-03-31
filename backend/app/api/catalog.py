@@ -86,9 +86,32 @@ async def search_catalog(
 
 @router.get("/trending")
 async def get_trending(
+    page: int = Query(1, ge=1),
     catalog: CatalogService = Depends(_get_catalog_service),
 ) -> dict[str, list[AnimeSummaryResponse]]:
-    items = await catalog.get_trending()
+    items = await catalog.get_trending(page=page)
+    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
+
+
+@router.get("/shows")
+async def get_shows(
+    page: int = Query(1, ge=1),
+    limit: int = Query(40, ge=1, le=100),
+    mode: str = Query("sub", pattern="^(sub|dub)$"),
+    catalog: CatalogService = Depends(_get_catalog_service),
+) -> dict[str, list[AnimeSummaryResponse]]:
+    items = await catalog.get_shows(limit=limit, page=page, mode=mode)
+    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
+
+
+@router.get("/movies")
+async def get_movies(
+    page: int = Query(1, ge=1),
+    limit: int = Query(40, ge=1, le=100),
+    mode: str = Query("sub", pattern="^(sub|dub)$"),
+    catalog: CatalogService = Depends(_get_catalog_service),
+) -> dict[str, list[AnimeSummaryResponse]]:
+    items = await catalog.get_movies(limit=limit, page=page, mode=mode)
     return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
 
 

@@ -18,15 +18,10 @@ class ProfileModel(BaseModel):
         from_attributes = True
 
 
-def _hash_pin(pin: str) -> str:
-    """Return a stable hash for a numeric PIN.
-
-    This is intentionally simple – the frontend already limits input to a short
-    numeric code and this service only runs on a trusted LAN. We still avoid
-    storing the raw PIN.
-    """
-
-    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
+def _hash_pin(pin: str, salt: str) -> str:
+    """Return a salted hash for a numeric PIN."""
+    payload = f"{salt}:{pin}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -38,10 +33,19 @@ class ProfileService:
         rows = (await self.db.execute(stmt)).scalars().all()
         return [ProfileModel.model_validate(row) for row in rows]
 
+    async def get_profile(self, profile_id: str) -> ProfileModel | None:
+        profile = await self.db.get(Profile, profile_id)
+        if profile is None:
+            return None
+        return ProfileModel.model_validate(profile)
+
     async def create_profile(self, name: str, pin: str | None = None) -> ProfileModel:
+        from uuid import uuid4
+        profile_id = str(uuid4())
         now = datetime.now(timezone.utc)
-        pin_hash = _hash_pin(pin) if pin else None
+        pin_hash = _hash_pin(pin, profile_id) if pin else None
         profile = Profile(
+            id=profile_id,
             name=name,
             pin_hash=pin_hash,
             is_locked=bool(pin_hash),
@@ -68,7 +72,7 @@ class ProfileService:
 
         if pin is not object():
             if pin:
-                profile.pin_hash = _hash_pin(pin)
+                profile.pin_hash = _hash_pin(str(pin), profile.id)
                 profile.is_locked = True
             else:
                 profile.pin_hash = None
@@ -89,4 +93,4 @@ class ProfileService:
         profile = await self.db.get(Profile, profile_id)
         if profile is None or not profile.pin_hash:
             return False
-        return profile.pin_hash == _hash_pin(pin)
+        return profile.pin_hash == _hash_pin(pin, profile.id)

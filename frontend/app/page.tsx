@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { ContinueCard } from "@/components/ContinueCard";
 import { useEffect } from "react";
 import { useInView } from "react-intersection-observer";
+import { usePreferences } from "@/hooks/usePreferences";
 
 type ContinueWatchingItem = {
     anime_id: string;
@@ -36,6 +37,8 @@ type PreferencesResponse = {
     items: PreferenceItem[];
 };
 
+import { GridView } from "@/components/GridView";
+
 export default function HomePage() {
     const queryClient = useQueryClient();
     const searchParams = useSearchParams();
@@ -51,14 +54,6 @@ export default function HomePage() {
         },
         staleTime: 0,
         refetchOnMount: "always",
-    });
-
-    const preferences = useQuery({
-        queryKey: ["preferences"],
-        queryFn: async () => {
-            const res = await api.get<PreferencesResponse>("/user/preferences");
-            return res.data.items;
-        }
     });
 
     const recommendations = useQuery({
@@ -83,8 +78,9 @@ export default function HomePage() {
             return res.data.sections;
         },
         getNextPageParam: (lastPage, allPages) => {
-            if (!lastPage || lastPage.length === 0) return undefined;
-            if (allPages.length >= 500) return undefined;
+            // Only stop if we've reached a very high page count or the backend returns truly nothing after our robust filling.
+            if (allPages.length >= 50) return undefined;
+            if (lastPage && lastPage.length === 0 && allPages.length > 5) return undefined;
             return allPages.length + 1;
         },
         initialPageParam: 1,
@@ -101,16 +97,23 @@ export default function HomePage() {
         }
     }, [inView, discovery.hasNextPage, discovery.isFetchingNextPage, discovery.fetchNextPage]);
 
-    const searchResults = useQuery({
+    const searchResults = useInfiniteQuery({
         queryKey: ["search", urlQuery],
         enabled: urlQuery.length > 0,
-        queryFn: async () => {
+        queryFn: async ({ pageParam = 1 }) => {
             const res = await api.get<{ items: AnimeSummary[] }>("/catalog/search", {
-                params: { q: urlQuery, mode: "sub" }
+                params: { q: urlQuery, mode: "sub", page: pageParam }
             });
-            return res.data.items;
-        }
+            return res.data;
+        },
+        getNextPageParam: (lastPage, allPages) => {
+            if (!lastPage || lastPage.items.length === 0) return undefined;
+            return allPages.length + 1;
+        },
+        initialPageParam: 1,
     });
+
+    const { handleToggleList, isInList } = usePreferences();
 
     const featuredAnime = (() => {
         const candidates = [
@@ -128,55 +131,16 @@ export default function HomePage() {
         return `/watch/${featuredAnime.id}/1`;
     })();
 
-    const getPreferenceForAnime = (animeId: string): PreferenceItem | undefined => {
-        return preferences.data?.find((item) => item.anime_id === animeId);
-    };
-
-    const toggleList = useMutation({
-        mutationFn: async (payload: { animeId: string; inList: boolean }) => {
-            await api.post("/user/preferences/list", {
-                anime_id: payload.animeId,
-                in_list: payload.inList
-            });
-        },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ["preferences"] });
-        }
-    });
-
-    const handleToggleList = (animeId: string) => {
-        const current = getPreferenceForAnime(animeId);
-        const nextInList = !current?.in_list;
-        toggleList.mutate({ animeId, inList: nextInList });
-    };
+    const isInitialLoading = recommendations.isLoading || discovery.isLoading;
 
     return (
         <div className="min-h-screen">
             {urlQuery ? (
-                <div className="px-[4%] pt-20 md:pt-24 pb-12">
-                    <h2 className="text-xl md:text-2xl font-black text-white mb-6">
-                        Search results for &quot;{urlQuery}&quot;
-                    </h2>
-                    {searchResults.isLoading ? (
-                        <p className="text-sm text-neutral-400">Searching…</p>
-                    ) : searchResults.isError ? (
-                        <p className="text-sm text-red-400">Something went wrong. Please try again.</p>
-                    ) : searchResults.data && searchResults.data.length > 0 ? (
-                        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-6 md:gap-4">
-                            {searchResults.data.map((anime) => (
-                                <AnimeCard
-                                    key={anime.id}
-                                    anime={anime}
-                                    isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
-                                    onToggleList={() => handleToggleList(anime.id)}
-                                    widthClassName="w-full"
-                                />
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-neutral-500">No results found.</p>
-                    )}
-                </div>
+                <GridView
+                    title={`Search results for "${urlQuery}"`}
+                    infiniteQuery={searchResults as any}
+                    emptyMessage="No results found."
+                />
             ) : (
                 <>
                     {featuredAnime && (
@@ -239,7 +203,6 @@ export default function HomePage() {
                                             item.episode !== "undefined"
                                     )
                                     .map((item) => {
-                                        const pref = getPreferenceForAnime(item.anime_id);
                                         return (
                                             <ContinueCard
                                                 key={`${item.anime_id}-${item.episode}`}
@@ -254,7 +217,7 @@ export default function HomePage() {
                                                 progress={item.progress}
                                                 positionSeconds={item.position_seconds}
                                                 durationSeconds={item.duration_seconds}
-                                                isInList={pref?.in_list ?? false}
+                                                isInList={isInList(item.anime_id)}
                                                 onToggleList={() => handleToggleList(item.anime_id)}
                                                 animeId={item.anime_id}
                                             />
@@ -269,7 +232,7 @@ export default function HomePage() {
                                     <AnimeCard
                                         key={anime.id}
                                         anime={anime}
-                                        isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
+                                        isInList={isInList(anime.id)}
                                         onToggleList={() => handleToggleList(anime.id)}
                                     />
                                 ))}
@@ -286,7 +249,7 @@ export default function HomePage() {
                                         <AnimeCard
                                             key={anime.id}
                                             anime={anime}
-                                            isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
+                                            isInList={isInList(anime.id)}
                                             onToggleList={() => handleToggleList(anime.id)}
                                         />
                                     ))}
@@ -295,29 +258,30 @@ export default function HomePage() {
                         )}
 
                         {/* Intersection Observer Trigger & Completion Message */}
-                        <div ref={ref} className="min-h-[80px] flex items-center justify-center w-full">
-                            {discovery.isFetchingNextPage ? (
-                                <div className="flex flex-col items-center gap-2 py-4">
-                                    <div className="flex gap-1">
-                                        <div className="w-1.5 h-1.5 bg-ncyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                        <div className="w-1.5 h-1.5 bg-ncyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                        <div className="w-1.5 h-1.5 bg-ncyan rounded-full animate-bounce"></div>
+                        <div ref={ref} className="min-h-[100px] flex items-center justify-center w-full">
+                            {discovery.isFetchingNextPage || isInitialLoading ? (
+                                <div className="flex flex-col items-center gap-2 py-8">
+                                    <div className="flex gap-1.5">
+                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce"></div>
                                     </div>
+                                    <p className="text-[10px] font-bold text-ncyan/50 uppercase tracking-[0.2em] mt-2">Discovering</p>
                                 </div>
-                            ) : !discovery.hasNextPage && discovery.data && discovery.data.pages.length > 0 ? (
-                                <div className="py-8 text-center animate-fade-in w-full max-w-2xl mx-auto px-4">
-                                    <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-800 to-transparent mb-6" />
-                                    <div className="space-y-2">
-                                        <h3 className="text-base md:text-lg font-bold text-white/70">
+                            ) : !discovery.hasNextPage && discovery.data && discovery.data.pages.flat().length > 0 ? (
+                                <div className="py-12 text-center animate-fade-in w-full max-w-2xl mx-auto px-4">
+                                    <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-800 to-transparent mb-8" />
+                                    <div className="space-y-3">
+                                        <h3 className="text-lg md:text-xl font-black text-white/80">
                                             That’s all for now.
                                         </h3>
-                                        <p className="text-[10px] md:text-xs text-neutral-600 font-medium max-w-md mx-auto uppercase tracking-widest">
-                                            You&apos;ve reached the end
+                                        <p className="text-[10px] md:text-xs text-neutral-600 font-bold max-w-md mx-auto uppercase tracking-[0.3em]">
+                                            Catalog Exhausted
                                         </p>
                                     </div>
                                     <button
                                         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-                                        className="mt-6 text-[10px] font-bold text-neutral-500 hover:text-ncyan transition-colors uppercase tracking-[0.2em] border border-neutral-800/50 px-4 py-1.5 rounded-full"
+                                        className="mt-8 text-[10px] font-bold text-neutral-500 hover:text-ncyan transition-all uppercase tracking-[0.2em] border border-neutral-800 hover:border-ncyan/30 px-6 py-2 rounded-full bg-neutral-900/50"
                                     >
                                         Back to Top ↑
                                     </button>

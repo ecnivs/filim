@@ -75,7 +75,7 @@ export default function ProfilesPage() {
             setUnlockingProfile(null);
             setPinInput("");
             setProfile({ id: variables.profile.id, name: variables.profile.name });
-            router.push("/");
+            window.location.href = "/";
         },
         onError: () => {
             setPinError("Incorrect PIN. Try again.");
@@ -90,7 +90,7 @@ export default function ProfilesPage() {
             return;
         }
         setProfile({ id: p.id, name: p.name });
-        router.push("/");
+        window.location.href = "/";
     };
 
     const handleCreateSubmit = () => {
@@ -111,11 +111,6 @@ export default function ProfilesPage() {
             <div className="w-full max-w-4xl px-4 py-10 space-y-10">
                 <div className="text-center space-y-2 animate-fade-in-up">
                     <h1 className="text-3xl sm:text-4xl font-bold">Who&apos;s watching?</h1>
-                    {profile && (
-                        <p className="text-sm text-neutral-500">
-                            Currently: <span className="text-neutral-300 font-medium">{profile.name}</span>
-                        </p>
-                    )}
                 </div>
 
                 <div className="flex flex-wrap justify-center gap-6 sm:gap-8">
@@ -219,33 +214,51 @@ export default function ProfilesPage() {
                 )}
 
                 {unlockingProfile && (
-                    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-4">
-                        <div className="w-full max-w-xs rounded-lg bg-surface border border-neutral-800 px-6 py-6 space-y-4 shadow-[0_16px_60px_rgba(0,0,0,0.8)]">
-                            <div className="text-center space-y-2">
-                                <div className={`h-16 w-16 mx-auto rounded-md bg-gradient-to-br ${AVATAR_COLORS[0]} flex items-center justify-center text-2xl font-black text-white/90`}>
+                    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-4 animate-in fade-in duration-300">
+                        <div className="w-full max-w-xs rounded-lg bg-surface border border-neutral-800 px-8 py-10 space-y-8 shadow-[0_16px_60px_rgba(0,0,0,0.8)] scale-in-center">
+                            <div className="text-center space-y-4">
+                                <div className={`h-20 w-20 mx-auto rounded-md bg-gradient-to-br ${AVATAR_COLORS[profiles.data?.findIndex(p => p.id === unlockingProfile.id) ?? 0 % AVATAR_COLORS.length]} flex items-center justify-center text-3xl font-black text-white/90 shadow-xl`}>
                                     {unlockingProfile.name.slice(0, 1).toUpperCase()}
                                 </div>
-                                <h2 className="text-lg font-bold">{unlockingProfile.name}</h2>
-                                <p className="text-xs text-neutral-500">Enter your PIN to continue</p>
+                                <div className="space-y-1">
+                                    <h2 className="text-xl font-bold text-white">Profile Lock</h2>
+                                    <p className="text-sm text-neutral-400">Enter your PIN to access this profile.</p>
+                                </div>
                             </div>
-                            <input
-                                type="password"
-                                inputMode="numeric"
-                                maxLength={6}
-                                value={pinInput}
-                                onChange={(e) => setPinInput(e.target.value.replace(/\\D/g, ""))}
-                                className="w-full rounded bg-neutral-800 border border-neutral-700 px-4 py-2.5 text-sm text-white text-center tracking-[0.5em] focus:outline-none focus:border-white transition-colors"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" && unlockingProfile) {
+
+                            <div className="space-y-4">
+                                <input
+                                    type="password"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={4}
+                                    value={pinInput}
+                                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
+                                    className="w-full bg-neutral-900 border-2 border-neutral-800 rounded-lg px-4 py-4 text-2xl text-white text-center tracking-[1em] focus:outline-none focus:border-ncyan transition-all"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" && pinInput.length >= 4) {
+                                            verifyPin.mutate({ profile: unlockingProfile, pin: pinInput });
+                                        }
+                                    }}
+                                />
+                                {pinError && (
+                                    <p className="text-xs text-nred text-center font-medium animate-pulse">{pinError}</p>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    type="button"
+                                    disabled={verifyPin.isPending || pinInput.length < 4}
+                                    onClick={() => {
+                                        if (!unlockingProfile) return;
                                         verifyPin.mutate({ profile: unlockingProfile, pin: pinInput });
-                                    }
-                                }}
-                            />
-                            {pinError && (
-                                <p className="text-xs text-red-400 text-center">{pinError}</p>
-                            )}
-                            <div className="flex justify-center gap-3">
+                                    }}
+                                    className="w-full rounded bg-white py-3 text-sm font-bold text-black hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white transition-all transform active:scale-95"
+                                >
+                                    {verifyPin.isPending ? "Unlocking..." : "Unlock"}
+                                </button>
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -253,19 +266,9 @@ export default function ProfilesPage() {
                                         setPinInput("");
                                         setPinError(null);
                                     }}
-                                    className="text-sm text-neutral-500 hover:text-white transition-colors"
+                                    className="w-full py-2 text-sm text-neutral-500 hover:text-white transition-colors"
                                 >
                                     Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (!unlockingProfile) return;
-                                        verifyPin.mutate({ profile: unlockingProfile, pin: pinInput });
-                                    }}
-                                    className="rounded bg-white px-5 py-2 text-sm font-bold text-black hover:bg-neutral-200 transition-colors"
-                                >
-                                    Unlock
                                 </button>
                             </div>
                         </div>

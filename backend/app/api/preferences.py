@@ -10,6 +10,8 @@ from app.preferences import (
     PreferenceModel,
     PreferencesService,
 )
+from app.api.catalog import _get_catalog_service, AnimeSummaryResponse
+from app.catalog import CatalogService
 
 
 class PreferenceItem(BaseModel):
@@ -60,6 +62,32 @@ async def get_preferences(
         return {"items": []}
     items = await service.get_preferences_for_profile(profile_id=x_profile_id)
     return {"items": [PreferenceItem.from_model(item) for item in items]}
+
+
+@router.get("/list")
+async def get_watchlist(
+    x_profile_id: str | None = Header(None, alias="X-Profile-Id"),
+    service: PreferencesService = Depends(_get_preferences_service),
+    catalog: CatalogService = Depends(_get_catalog_service),
+) -> dict[str, list[AnimeSummaryResponse]]:
+    if not x_profile_id:
+        return {"items": []}
+
+    anime_ids = await service.get_list_anime_ids(profile_id=x_profile_id)
+    if not anime_ids:
+        return {"items": []}
+
+    # Resolve IDs to full anime objects.
+    # Note: This might be slow for large lists, but functional for now.
+    results = []
+    for aid in anime_ids:
+        try:
+            details = await catalog.get_show_details(anime_id=aid)
+            results.append(AnimeSummaryResponse.from_source(details))
+        except Exception:
+            continue
+
+    return {"items": results}
 
 
 @router.post("/preferences/list")

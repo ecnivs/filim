@@ -18,6 +18,7 @@ class AnimeSummaryModel(BaseModel):
     synopsis: Optional[str] = None
     tags: list[str] = []
     poster_image_url: Optional[str] = None
+    type: Optional[str] = None
 
     available_audio_languages: list[str] = []
     related_shows: list[dict[str, Any]] = []
@@ -111,7 +112,7 @@ class AllAnimeSourceAdapter:
             "shows( search: $search limit: $limit page: $page "
             "translationType: $translationType countryOrigin: $countryOrigin ) { "
             "edges { _id name englishName altNames description genres thumbnail "
-            "availableEpisodesDetail __typename } } }"
+            "type availableEpisodesDetail __typename } } }"
         )
         variables = {
             "search": {
@@ -154,6 +155,7 @@ class AllAnimeSourceAdapter:
                     poster_image_url=thumb,
                     available_audio_languages=languages,
                     alt_names=list(edge.get("altNames") or []),
+                    type=edge.get("type"),
                 )
             )
         return results
@@ -162,6 +164,7 @@ class AllAnimeSourceAdapter:
     async def get_popular_shows(
         self,
         limit: int = 20,
+        page: int = 1,
         mode: str = "sub",
     ) -> list[AnimeSummaryModel]:
         """Best-effort popular list for use as a fallback 'Trending' row.
@@ -178,7 +181,7 @@ class AllAnimeSourceAdapter:
             "shows( search: $search limit: $limit page: $page "
             "translationType: $translationType countryOrigin: $countryOrigin ) { "
             "edges { _id name englishName altNames description genres thumbnail "
-            "availableEpisodesDetail __typename } } }"
+            "type availableEpisodesDetail __typename } } }"
         )
         variables = {
             "search": {
@@ -187,7 +190,7 @@ class AllAnimeSourceAdapter:
                 "allowUnknown": True,
             },
             "limit": limit,
-            "page": 1,
+            "page": page,
             "translationType": mode,
             "countryOrigin": "ALL",
         }
@@ -221,6 +224,7 @@ class AllAnimeSourceAdapter:
                     poster_image_url=thumb,
                     available_audio_languages=languages,
                     alt_names=list(edge.get("altNames") or []),
+                    type=edge.get("type"),
                 )
             )
         return results
@@ -242,6 +246,7 @@ class AllAnimeSourceAdapter:
             genres
             thumbnail
             status
+            type
             relatedShows
             availableEpisodesDetail
           }
@@ -282,6 +287,7 @@ class AllAnimeSourceAdapter:
             available_audio_languages=languages,
             related_shows=list(show.get("relatedShows") or []),
             alt_names=list(show.get("altNames") or []),
+            type=show.get("type"),
         )
 
     @cache_response(ttl_seconds=3600, response_model=EpisodeSummaryModel)

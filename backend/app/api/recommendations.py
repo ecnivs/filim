@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -35,8 +35,8 @@ async def get_global_recommended(
 
 @router.get("/recommendations/discovery")
 async def get_discovery_sections(
-    page: int = 1,
-    limit: int = 3,
+    page: int = Query(1, ge=1),
+    limit: int = Query(3, ge=1, le=50),
     x_profile_id: str | None = Header(None, alias="X-Profile-Id"),
     service: RecommendationService = Depends(_get_recommendation_service),
 ) -> dict[str, list[RecommendationSectionModel]]:
