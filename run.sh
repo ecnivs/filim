@@ -15,6 +15,11 @@ cleanup() {
 
 trap cleanup INT TERM
 
+# Ensure no lingering processes are holding the ports
+echo "Terminating any existing processes on ports 3000 and 8000..."
+fuser -k 8000/tcp 2>/dev/null || true
+fuser -k 3000/tcp 2>/dev/null || true
+
 # 1. Initialize Database (SQLite file will be created if not exists)
 (cd backend && python3 -m app.db.init_db)
 

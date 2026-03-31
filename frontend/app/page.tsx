@@ -146,7 +146,7 @@ export default function HomePage() {
             ) : (
                 <>
                     {featuredAnime && (
-                        <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[400px] md:min-h-[500px]">
+                        <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[320px] md:min-h-[500px]">
                             <div className="absolute inset-0">
                                 {featuredAnime.banner_image_url || featuredAnime.poster_image_url ? (
                                     <Image
@@ -176,13 +176,13 @@ export default function HomePage() {
                                     <div className="flex items-center gap-2 md:gap-3 pt-1">
                                         <Link
                                             href={billboardResumeHref}
-                                            className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-6 py-2 md:py-2.5 text-sm font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20"
+                                            className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-6 py-2.5 md:py-2.5 text-sm font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20 min-h-[44px]"
                                         >
                                             <span className="text-base md:text-lg">▶</span> Play
                                         </Link>
                                         <Link
                                             href={`/anime/${featuredAnime.id}`}
-                                            className="flex items-center gap-2 rounded bg-neutral-500/50 px-4 md:px-6 py-2 md:py-2.5 text-xs md:text-sm font-bold text-white transition hover:bg-neutral-500/70 backdrop-blur-md"
+                                            className="flex items-center gap-2 rounded bg-neutral-500/50 px-4 md:px-6 py-2.5 md:py-2.5 text-xs md:text-sm font-bold text-white transition hover:bg-neutral-500/70 backdrop-blur-md min-h-[44px]"
                                         >
                                             <span className="text-base md:text-lg">ⓘ</span>
                                             More Info

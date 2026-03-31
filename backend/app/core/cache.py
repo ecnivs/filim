@@ -4,6 +4,7 @@ import hashlib
 import logging
 from typing import Any, Callable, TypeVar, Type, Optional
 from pydantic import BaseModel
+from fastapi.encoders import jsonable_encoder
 from app.db.cache_store import cache_client as redis_client
 
 T = TypeVar("T")
@@ -43,12 +44,7 @@ def cache_response(
 
             if result is not None:
                 try:
-                    data_to_cache = result
-                    if isinstance(result, BaseModel):
-                        data_to_cache = result.model_dump()
-                    elif isinstance(result, list) and result:
-                        if isinstance(result[0], BaseModel):
-                            data_to_cache = [item.model_dump() for item in result]
+                    data_to_cache = jsonable_encoder(result)
 
                     await redis_client.setex(
                         key, ttl_seconds, json.dumps(data_to_cache)

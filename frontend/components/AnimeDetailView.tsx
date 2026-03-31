@@ -198,7 +198,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                     <div className="flex items-center gap-2 md:gap-3">
                         <Link
                             href={resumeHref}
-                            className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-8 py-2 md:py-2.5 text-sm md:text-base font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20"
+                            className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-8 py-2.5 md:py-2.5 text-sm md:text-base font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20 min-h-[44px]"
                         >
                             <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="currentColor">
                                 <path d="M6 4l15 8-15 8V4z" />
@@ -231,7 +231,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                             <span>{new Date().getFullYear()}</span>
                             <span>{data.episode_count} Episodes</span>
                         </div>
-                        <div className="text-sm md:text-lg text-white leading-relaxed whitespace-pre-wrap">
+                        <div className="text-[13px] md:text-lg text-white leading-relaxed whitespace-pre-wrap">
                             {synopsisExpanded ? (
                                 <>
                                     {cleanSynopsis}
@@ -303,7 +303,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                                 <Link
                                     key={ep.number}
                                     href={`/watch/${data.id}/${ep.number}`}
-                                    className="group flex items-center text-left gap-3 md:gap-6 p-3 md:p-4 rounded-lg bg-neutral-900/50 hover:bg-neutral-800 active:bg-neutral-700 transition-colors border-b border-neutral-800/50 last:border-0"
+                                    className="group flex items-center text-left gap-3 md:gap-6 p-3 py-4 md:p-4 rounded-lg bg-neutral-900/50 hover:bg-neutral-800 active:bg-neutral-700 transition-colors border-b border-neutral-800/50 last:border-0"
                                 >
                                     <span className="text-lg md:text-2xl font-black text-neutral-600 w-6 md:w-8 text-center shrink-0">
                                         {idx + 1}
@@ -380,7 +380,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                 {moreLikeThis && moreLikeThis.items.filter(item => item.id !== data.id).length > 0 && (
                     <section className="space-y-4 md:space-y-6">
                         <h2 className="text-xl md:text-2xl font-black text-white">More Like This</h2>
-                        <div className="grid grid-cols-3 sm:grid-cols-3 gap-x-2 gap-y-6 md:gap-4">
+                        <div className="grid grid-cols-3 sm:grid-cols-3 gap-x-2 gap-y-4 md:gap-4">
                             {moreLikeThis.items.filter(item => item.id !== data.id).slice(0, 6).map(anime => (
                                 <AnimeCard
                                     key={anime.id}

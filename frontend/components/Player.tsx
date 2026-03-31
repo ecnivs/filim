@@ -136,6 +136,10 @@ export function Player({
     const seekBarRef = useRef<HTMLDivElement | null>(null);
     const [isMobileDevice, setIsMobileDevice] = useState(false);
     const [isCssLandscape, setIsCssLandscape] = useState(false);
+    const clickTimeoutRef = useRef<number | null>(null);
+    const controlsVisibleRef = useRef(controlsVisible);
+    controlsVisibleRef.current = controlsVisible;
+    const lastWakeTimeRef = useRef<number>(0);
 
     const onProgressRef = useRef(onProgress);
     onProgressRef.current = onProgress;
@@ -523,6 +527,9 @@ export function Player({
         let timeout: number | null = null;
 
         const resetTimer = () => {
+            if (!controlsVisibleRef.current) {
+                lastWakeTimeRef.current = Date.now();
+            }
             setControlsVisible(true);
             if (containerRef.current) {
                 containerRef.current.style.cursor = "default";
@@ -564,12 +571,34 @@ export function Player({
         };
     }, [isPlaying, activeMenu]);
 
+    const exitingFullscreenRef = useRef(false);
+
     useEffect(() => {
         const handleFullscreenChange = () => {
             const fsElement =
                 document.fullscreenElement ||
                 (document as any).webkitFullscreenElement;
             setIsFullscreen(!!fsElement);
+
+            // On mobile, when the system back button exits fullscreen,
+            // the browser consumes the back event. We need to navigate back ourselves.
+            if (!fsElement && isMobileDevice && !exitingFullscreenRef.current) {
+                // Save progress before leaving
+                if (durationRef.current > 0 && onProgressRef.current) {
+                    onProgressRef.current({
+                        positionSeconds: lastTimeRef.current,
+                        durationSeconds: durationRef.current,
+                        isFinished: false
+                    });
+                }
+                // Navigate back
+                if (onBack) {
+                    onBack();
+                } else {
+                    history.back();
+                }
+            }
+            exitingFullscreenRef.current = false;
         };
 
         document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -579,7 +608,7 @@ export function Player({
             document.removeEventListener("fullscreenchange", handleFullscreenChange);
             document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
         };
-    }, []);
+    }, [isMobileDevice, onBack]);
 
     useEffect(() => {
         const handleKey = (event: KeyboardEvent) => {
@@ -859,23 +888,67 @@ export function Player({
             `}} />
             <div
                 ref={containerRef}
-                className="relative flex h-full w-full flex-col bg-black text-white overflow-hidden"
-                onClick={() => {
+                className="relative flex h-full w-full flex-col bg-black text-white overflow-hidden overscroll-none"
+                onClick={(e) => {
                     const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                     if (isMobile) {
                         void enforceMobileFullscreen();
                     }
 
+                    // Ignore clicks on control elements that should be handled natively
+                    if ((e.target as HTMLElement).closest('button, a, input, [role="button"], .pointer-events-auto')) {
+                        // Let the controls handle their own clicks
+                        return;
+                    }
+
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const width = rect.width;
+
+                    if (clickTimeoutRef.current !== null) {
+                        // Double click registered
+                        window.clearTimeout(clickTimeoutRef.current);
+                        clickTimeoutRef.current = null;
+
+                        if (x < width * 0.3) {
+                            seekRelative(-10);
+                        } else if (x > width * 0.7) {
+                            seekRelative(10);
+                        } else {
+                            toggleFullscreen();
+                        }
+                        return;
+                    }
+
+                    // Single click initiated
+                    if (Date.now() - lastWakeTimeRef.current < 500) {
+                        // UI just woke up from touchstart/mousemove; don't pause!
+                        clickTimeoutRef.current = window.setTimeout(() => {
+                            clickTimeoutRef.current = null;
+                        }, 300);
+                        return;
+                    }
+
                     if (!controlsVisible) {
+                        // Wake up UI immediately
                         setControlsVisible(true);
+                        lastWakeTimeRef.current = Date.now();
+                        // Start timeout to catch potential double tap for seek while sleeping
+                        clickTimeoutRef.current = window.setTimeout(() => {
+                            clickTimeoutRef.current = null;
+                        }, 300);
                     } else {
-                        togglePlay();
+                        // UI is awake. Wait 300ms to ensure it's not a double-tap before pausing
+                        clickTimeoutRef.current = window.setTimeout(() => {
+                            clickTimeoutRef.current = null;
+                            togglePlay();
+                        }, 300);
                     }
                 }}
             >
                 <video
                     ref={videoRef}
-                    className="h-full w-full bg-black object-contain"
+                    className="pointer-events-none h-full w-full bg-black object-contain"
                     playsInline
                     controls={false}
                 />
@@ -892,8 +965,8 @@ export function Player({
                     leaveTo="opacity-0"
                 >
                     <div className="pointer-events-none absolute inset-0">
-                        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/80 via-black/40 to-transparent" />
-                        <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                        <div className="absolute inset-x-0 top-0 h-28 sm:h-40 bg-gradient-to-b from-black/80 via-black/40 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 h-44 sm:h-64 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                     </div>
                 </Transition>
 
@@ -908,8 +981,8 @@ export function Player({
                     leaveFrom="opacity-100 translate-y-0"
                     leaveTo="opacity-0 -translate-y-4"
                 >
-                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-4 sm:px-12 pt-8 text-sm">
-                        <div className="flex items-start gap-6">
+                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-3 sm:px-4 sm:px-12 pt-4 sm:pt-8 text-sm">
+                        <div className="flex items-start gap-3 sm:gap-6">
                             <button
                                 onClick={(e) => {
                                     e.preventDefault();
@@ -921,6 +994,19 @@ export function Player({
                                             isFinished: false
                                         });
                                     }
+                                    
+                                    exitingFullscreenRef.current = true;
+                                    const fsElement =
+                                        document.fullscreenElement ||
+                                        (document as any).webkitFullscreenElement;
+                                    if (fsElement) {
+                                        if (document.exitFullscreen) {
+                                            void document.exitFullscreen().catch(() => {});
+                                        } else if ((document as any).webkitExitFullscreen) {
+                                            void ((document as any).webkitExitFullscreen)();
+                                        }
+                                    }
+
                                     if (onBack) {
                                         onBack();
                                     } else {
@@ -930,11 +1016,11 @@ export function Player({
                                 className="mt-1 transition-opacity opacity-80 hover:opacity-100 active:scale-95"
                                 aria-label="Back"
                             >
-                                <ArrowLeft className="h-8 w-8 text-white drop-shadow-md" strokeWidth={2.5} />
+                                <ArrowLeft className="h-6 w-6 sm:h-8 sm:w-8 text-white drop-shadow-md" strokeWidth={2.5} />
                             </button>
                             <div className="space-y-1.5 flex-1">
                                 {title && (
-                                    <p className="max-w-2xl text-xl font-bold sm:text-3xl tracking-tight text-white drop-shadow-md">
+                                    <p className="max-w-[200px] sm:max-w-2xl text-base sm:text-xl font-bold sm:text-3xl tracking-tight text-white drop-shadow-md line-clamp-1 sm:line-clamp-none">
                                         {title}
                                     </p>
                                 )}
@@ -947,7 +1033,7 @@ export function Player({
                             {qualityOptions && qualityOptions.length > 0 && (
                                 <Menu
                                     label="Quality"
-                                    icon={<Settings className="h-6 w-6" />}
+                                    icon={<Settings className="h-5 w-5 sm:h-6 sm:w-6" />}
                                     value={currentQualityId ?? "auto"}
                                     options={qualityOptions.map(o => ({ id: o.id, label: o.label }))}
                                     onChange={(id) => onChangeQuality?.(id === "auto" ? null : id)}
@@ -967,13 +1053,13 @@ export function Player({
                 {/* Center play/pause indicator */}
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                     {!isPlaying && !isBuffering && isPlayerReady && (
-                        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                            <Play className="h-10 w-10 text-white fill-white ml-2 drop-shadow-lg" />
+                        <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                            <Play className="h-7 w-7 sm:h-10 sm:w-10 text-white fill-white ml-1 sm:ml-2 drop-shadow-lg" />
                         </div>
                     )}
                     {(isBuffering || (!isPlayerReady && !hasEnded)) && (
-                        <div className="flex h-24 w-24 items-center justify-center">
-                            <svg className="animate-spin h-16 w-16 text-ncyan drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center">
+                            <svg className="animate-spin h-10 w-10 sm:h-16 sm:w-16 text-ncyan drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-100" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
@@ -984,7 +1070,7 @@ export function Player({
 
                 {/* Skip intro */}
                 {showSkipIntro && !hasSkippedIntro && introEndSeconds && (
-                    <div className="pointer-events-auto absolute bottom-28 right-6">
+                    <div className="pointer-events-auto absolute bottom-20 right-4 sm:bottom-28 sm:right-6">
                         <button
                             type="button"
                             onClick={() => {
@@ -1044,12 +1130,12 @@ export function Player({
                     leaveTo="opacity-0 translate-y-8"
                 >
                     <div
-                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-4 pb-8 pt-2 sm:px-12 sm:pb-12"
+                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-3 pb-3 pt-2 sm:px-4 sm:pb-8 sm:px-12 sm:pb-12"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="space-y-6">
+                        <div className="space-y-3 sm:space-y-6">
                             {/* Seek bar */}
-                            <div className="group relative flex items-center py-2 h-6">
+                            <div className="group relative flex items-center py-2 h-8 sm:h-6">
                                 <div
                                     ref={seekBarRef}
                                     className="relative h-1 w-full flex-1 bg-white/10 transition-all group-hover:h-1.5 rounded-full overflow-visible cursor-pointer"
@@ -1068,7 +1154,7 @@ export function Player({
                                     />
                                     {/* Netflix-style scrub dot */}
                                     <div
-                                        className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-ncyan opacity-0 group-hover:opacity-100 transition-opacity shadow-[0_0_6px_rgba(30,215,96,0.5)] pointer-events-none z-10"
+                                        className="absolute top-1/2 -translate-y-1/2 h-4 w-4 sm:h-3.5 sm:w-3.5 rounded-full bg-ncyan opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-[0_0_6px_rgba(30,215,96,0.5)] pointer-events-none z-10"
                                         style={{ left: `${effectivePercent}%`, transform: `translate(-50%, -50%)` }}
                                     />
                                 </div>
@@ -1080,29 +1166,29 @@ export function Player({
                             {/* Main controls row */}
                             <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
                                 {/* Left controls: Play, Rewind, Forward, Volume */}
-                                <div className="flex items-center gap-4 sm:gap-6 justify-start">
+                                <div className="flex items-center gap-2 sm:gap-4 sm:gap-6 justify-start">
                                     <button
                                         type="button"
                                         onClick={togglePlay}
-                                        className="group flex h-10 w-10 items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
+                                        className="group flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
                                         aria-label={isPlaying ? "Pause" : "Play"}
                                     >
                                         {isPlaying ? (
-                                            <Pause className="h-8 w-8 text-white fill-white" />
+                                            <Pause className="h-6 w-6 sm:h-8 sm:w-8 text-white fill-white" />
                                         ) : (
-                                            <Play className="h-8 w-8 text-white fill-white ml-0.5" />
+                                            <Play className="h-6 w-6 sm:h-8 sm:w-8 text-white fill-white ml-0.5" />
                                         )}
                                     </button>
 
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2 sm:gap-4">
                                         <button
                                             type="button"
                                             onClick={() => seekRelative(-10)}
                                             className="group relative flex items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
                                             aria-label="Rewind 10 seconds"
                                         >
-                                            <RotateCcw className="h-7 w-7 text-white" />
-                                            <span className="absolute text-[0.6rem] font-black text-white mt-1">10</span>
+                                            <RotateCcw className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
+                                            <span className="absolute text-[0.5rem] sm:text-[0.6rem] font-black text-white mt-0.5 sm:mt-1">10</span>
                                         </button>
                                         <button
                                             type="button"
@@ -1110,13 +1196,13 @@ export function Player({
                                             className="group relative flex items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
                                             aria-label="Forward 10 seconds"
                                         >
-                                            <RotateCw className="h-7 w-7 text-white" />
-                                            <span className="absolute text-[0.6rem] font-black text-white mt-1">10</span>
+                                            <RotateCw className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
+                                            <span className="absolute text-[0.5rem] sm:text-[0.6rem] font-black text-white mt-0.5 sm:mt-1">10</span>
                                         </button>
                                     </div>
 
-                                    {/* Volume cluster: reveal on hover */}
-                                    <div className="group relative flex items-center gap-2">
+                                    {/* Volume cluster: reveal on hover — hidden on mobile */}
+                                    <div className="hidden sm:flex group relative items-center gap-2">
                                         <button
                                             type="button"
                                             onClick={toggleMute}
@@ -1144,12 +1230,12 @@ export function Player({
                                 </div>
 
                                 {/* Center: Metadata (Title + Episode Label) */}
-                                <div className="flex flex-col items-center justify-center text-center px-4 overflow-hidden">
-                                    <div className="flex flex-col items-center justify-center text-center gap-1">
-                                        <span className="text-[10px] sm:text-xs font-bold text-neutral-400 uppercase tracking-[0.15em] opacity-80">
+                                <div className="flex flex-col items-center justify-center text-center px-2 sm:px-4 overflow-hidden">
+                                    <div className="flex flex-col items-center justify-center text-center gap-0.5 sm:gap-1">
+                                        <span className="text-[8px] sm:text-[10px] sm:text-xs font-bold text-neutral-400 uppercase tracking-[0.15em] opacity-80 hidden sm:block">
                                             {title}
                                         </span>
-                                        <span className="text-xs sm:text-sm font-semibold text-white tracking-wide truncate max-w-[250px] sm:max-w-xl">
+                                        <span className="text-[10px] sm:text-xs sm:text-sm font-semibold text-white tracking-wide truncate max-w-[120px] sm:max-w-[250px] sm:max-w-xl">
                                             {episodeLabel}
                                         </span>
                                     </div>
@@ -1157,7 +1243,7 @@ export function Player({
 
                                 {/* Right controls: Next, Episodes, Audio/Subs, Speed, Fullscreen */}
                                 <div
-                                    className="flex items-center gap-3 sm:gap-5 justify-end"
+                                    className="flex items-center gap-1.5 sm:gap-3 sm:gap-5 justify-end"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     {!isMovie && (
@@ -1166,7 +1252,7 @@ export function Player({
                                                 href={nextEpisodeHref || "#"}
                                                 className={`flex items-center justify-center p-2 text-white transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-0 ${!nextEpisodeHref ? "opacity-20 grayscale pointer-events-none" : "hover:text-white"}`}
                                             >
-                                                <SkipForward className="h-7 w-7 fill-current" />
+                                                <SkipForward className="h-5 w-5 sm:h-7 sm:w-7 fill-current" />
                                             </Link>
 
                                             <div
@@ -1192,7 +1278,7 @@ export function Player({
                                                     className={`flex items-center gap-2 rounded-full p-2 text-white transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-0 ${activeMenu === "episodes" ? "text-ncyan" : ""}`}
                                                     aria-label="Episodes"
                                                 >
-                                                    <Layers className="h-7 w-7" />
+                                                    <Layers className="h-5 w-5 sm:h-7 sm:w-7" />
                                                 </button>
 
                                                 <EpisodesPanel
@@ -1211,7 +1297,7 @@ export function Player({
                                     {(subtitleTracks.length > 0 || (languageOptions && languageOptions.length > 0)) && (
                                         <TwoColumnMenu
                                             label="Audio & Subtitles"
-                                            icon={<MessageSquare className="h-7 w-7" />}
+                                            icon={<MessageSquare className="h-5 w-5 sm:h-7 sm:w-7" />}
                                             sections={[
                                                 {
                                                     title: "Audio",
@@ -1261,26 +1347,28 @@ export function Player({
                                         />
                                     )}
 
-                                    <Menu
-                                        label="Playback Speed"
-                                        icon={<Gauge className="h-7 w-7" />}
-                                        value={playbackSpeed.toString()}
-                                        options={[
-                                            { id: "0.5", label: "0.5x" },
-                                            { id: "0.75", label: "0.75x" },
-                                            { id: "1", label: "Normal" },
-                                            { id: "1.25", label: "1.25x" },
-                                            { id: "1.5", label: "1.5x" },
-                                            { id: "2", label: "2x" }
-                                        ]}
-                                        onChange={(id) => changePlaybackSpeed(Number(id))}
-                                        isOpen={activeMenu === "speed"}
-                                        onToggle={(open) => {
-                                            if (open) setActiveMenu("speed");
-                                            else if (activeMenu === "speed") setActiveMenu(null);
-                                        }}
-                                        activeIds={[playbackSpeed.toString()]}
-                                    />
+                                    <div className="hidden sm:block">
+                                        <Menu
+                                            label="Playback Speed"
+                                            icon={<Gauge className="h-7 w-7" />}
+                                            value={playbackSpeed.toString()}
+                                            options={[
+                                                { id: "0.5", label: "0.5x" },
+                                                { id: "0.75", label: "0.75x" },
+                                                { id: "1", label: "Normal" },
+                                                { id: "1.25", label: "1.25x" },
+                                                { id: "1.5", label: "1.5x" },
+                                                { id: "2", label: "2x" }
+                                            ]}
+                                            onChange={(id) => changePlaybackSpeed(Number(id))}
+                                            isOpen={activeMenu === "speed"}
+                                            onToggle={(open) => {
+                                                if (open) setActiveMenu("speed");
+                                                else if (activeMenu === "speed") setActiveMenu(null);
+                                            }}
+                                            activeIds={[playbackSpeed.toString()]}
+                                        />
+                                    </div>
 
                                     {/* Hide the fullscreen button exclusively for mobile users, per Netflix UI */}
                                     {!isMobileDevice && (
@@ -1373,7 +1461,8 @@ function Menu({
                 leaveFrom="opacity-100 scale-100 translate-y-0"
                 leaveTo="opacity-0 scale-95 translate-y-2"
             >
-                <div className={`absolute ${placement === "top" ? "top-full" : "bottom-full"} right-0 ${placement === "top" ? "mt-4" : "mb-4"} w-48 max-h-[70vh] overflow-y-auto rounded-lg bg-[#141414]/95 backdrop-blur-3xl border border-white/10 p-2 shadow-2xl ring-1 ring-white/5 z-50`}>
+                {/* Desktop popover */}
+                <div className={`hidden sm:block absolute ${placement === "top" ? "top-full" : "bottom-full"} right-0 ${placement === "top" ? "mt-4" : "mb-4"} w-48 max-h-[70vh] overflow-y-auto rounded-lg bg-[#141414]/95 backdrop-blur-3xl border border-white/10 p-2 shadow-2xl ring-1 ring-white/5 z-50`}>
                     <div className="px-3 py-2 text-[0.65rem] font-black uppercase tracking-[0.2em] text-neutral-500 border-b border-white/5 mb-1">
                         {label}
                     </div>
@@ -1386,6 +1475,41 @@ function Menu({
                             {opt.label}
                         </MenuOption>
                     ))}
+                </div>
+            </Transition>
+
+            {/* Mobile bottom sheet */}
+            <Transition
+                show={isOpen}
+                as={Fragment}
+                enter="transition duration-200 ease-out"
+                enterFrom="opacity-0 translate-y-full"
+                enterTo="opacity-100 translate-y-0"
+                leave="transition duration-150 ease-in"
+                leaveFrom="opacity-100 translate-y-0"
+                leaveTo="opacity-0 translate-y-full"
+            >
+                <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onToggle(false); }}>
+                    <div className="absolute inset-0 bg-black/60" />
+                    <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[#1a1a1a] border-t border-white/10 p-4 pb-8 max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="w-10 h-1 bg-neutral-600 rounded-full mx-auto mb-4" />
+                        <div className="px-2 py-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-500 mb-2">
+                            {label}
+                        </div>
+                        {options.map(opt => (
+                            <button
+                                key={opt.id}
+                                onClick={() => { onChange(opt.id); onToggle(false); }}
+                                className={`flex w-full items-center justify-between px-4 py-3.5 text-sm text-left rounded-lg transition-colors focus:outline-none focus:ring-0 ${(activeIds ? activeIds.includes(opt.id) : value === opt.id)
+                                    ? "bg-white/10 text-white font-bold"
+                                    : "text-neutral-400 active:bg-white/5"
+                                    }`}
+                            >
+                                <span>{opt.label}</span>
+                                {(activeIds ? activeIds.includes(opt.id) : value === opt.id) && <Check className="h-4 w-4 text-white stroke-[4px]" />}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </Transition>
         </div>
@@ -1451,7 +1575,8 @@ function TwoColumnMenu({
                 leaveFrom="opacity-100 scale-100 translate-y-0"
                 leaveTo="opacity-0 scale-95 translate-y-2"
             >
-                <div className="absolute bottom-full right-0 mb-4 flex w-[480px] max-h-[75vh] overflow-hidden rounded-lg bg-[#141414]/95 backdrop-blur-3xl border border-white/10 shadow-2xl ring-1 ring-white/5 z-50">
+                {/* Desktop popover */}
+                <div className="hidden sm:flex absolute bottom-full right-0 mb-4 w-[480px] max-h-[75vh] overflow-hidden rounded-lg bg-[#141414]/95 backdrop-blur-3xl border border-white/10 shadow-2xl ring-1 ring-white/5 z-50">
                     {sections.map((section, idx) => (
                         <div key={section.title} className={`flex-1 flex flex-col min-w-0 ${idx === 0 ? "border-r border-white/10" : ""}`}>
                             <div className="px-8 py-6 text-xl font-black uppercase tracking-[0.2em] text-neutral-500 border-b border-white/5">
@@ -1483,6 +1608,52 @@ function TwoColumnMenu({
                             </div>
                         </div>
                     ))}
+                </div>
+            </Transition>
+
+            {/* Mobile bottom sheet */}
+            <Transition
+                show={isOpen}
+                as={Fragment}
+                enter="transition duration-200 ease-out"
+                enterFrom="opacity-0 translate-y-full"
+                enterTo="opacity-100 translate-y-0"
+                leave="transition duration-150 ease-in"
+                leaveFrom="opacity-100 translate-y-0"
+                leaveTo="opacity-0 translate-y-full"
+            >
+                <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onToggle(false); }}>
+                    <div className="absolute inset-0 bg-black/60" />
+                    <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[#1a1a1a] border-t border-white/10 p-4 pb-8 max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="w-10 h-1 bg-neutral-600 rounded-full mx-auto mb-4" />
+                        {sections.map((section, idx) => (
+                            <div key={section.title} className={`${idx > 0 ? "mt-4 pt-4 border-t border-white/10" : ""}`}>
+                                <div className="px-2 py-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-500 mb-1">
+                                    {section.title}
+                                </div>
+                                <div className="space-y-0.5">
+                                    {section.options.map(opt => {
+                                        const isActive = activeIds.includes(opt.id);
+                                        return (
+                                            <button
+                                                key={opt.id}
+                                                onClick={() => { onSelect(opt.id); }}
+                                                className={`flex w-full items-center gap-4 px-4 py-3.5 text-sm text-left rounded-lg transition-colors focus:outline-none focus:ring-0 ${isActive
+                                                    ? "bg-white/10 text-white font-bold"
+                                                    : "text-neutral-400 active:bg-white/5"
+                                                    }`}
+                                            >
+                                                <div className="w-5 flex shrink-0 justify-center">
+                                                    {isActive && <Check className="h-4 w-4 text-white stroke-[3px]" />}
+                                                </div>
+                                                <span className="truncate">{opt.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </Transition>
         </div>
