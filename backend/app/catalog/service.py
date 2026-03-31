@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Anime, AnimeStats
 from app.sources import AllAnimeSourceAdapter, AnimeSummaryModel, EpisodeSummaryModel
 from app.core.utils import normalize_title
-from app.core.constants import MODE_SUB, SUPPORTED_RELATIONS
+from app.core.constants import MODE_SUB, SUPPORTED_RELATIONS, COMMON_GENRES
 
 
 class CatalogService:
@@ -16,9 +16,25 @@ class CatalogService:
         self.source = source or AllAnimeSourceAdapter()
 
     async def search(
-        self, query: str, mode: str = MODE_SUB, page: int = 1
+        self,
+        query: str,
+        mode: str = MODE_SUB,
+        page: int = 1,
+        genres: list[str] | None = None,
     ) -> list[AnimeSummaryModel]:
-        results = await self.source.search_shows(query=query, mode=mode, page=page)
+        search_genres = genres or []
+        if not genres and " " not in query:
+            q_clean = query.strip().title()
+            if q_clean in COMMON_GENRES:
+                search_genres = [q_clean]
+
+        search_query = query
+        if search_genres and query.strip().title() in search_genres:
+            search_query = ""
+
+        results = await self.source.search_shows(
+            query=search_query, mode=mode, page=page, genres=search_genres or None
+        )
         return self._deduplicate_results(results)
 
     def _deduplicate_results(

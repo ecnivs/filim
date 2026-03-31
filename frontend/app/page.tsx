@@ -45,6 +45,7 @@ export default function HomePage() {
     const { profile } = useProfile();
     const searchParams = useSearchParams();
     const urlQuery = searchParams.get("q") || "";
+    const urlGenres = searchParams.get("genres") || "";
 
     const continueWatching = useQuery({
         queryKey: ["continue-watching"],
@@ -98,11 +99,16 @@ export default function HomePage() {
     }, [inView, discovery.hasNextPage, discovery.isFetchingNextPage, discovery.fetchNextPage]);
 
     const searchResults = useInfiniteQuery({
-        queryKey: ["search", urlQuery],
-        enabled: urlQuery.length > 0,
+        queryKey: ["search", urlQuery, urlGenres],
+        enabled: urlQuery.length > 0 || urlGenres.length > 0,
         queryFn: async ({ pageParam = 1 }) => {
             const res = await api.get<{ items: AnimeSummary[] }>("/catalog/search", {
-                params: { q: urlQuery, mode: "sub", page: pageParam }
+                params: { 
+                    q: urlQuery, 
+                    genres: urlGenres,
+                    mode: "sub", 
+                    page: pageParam 
+                }
             });
             return res.data;
         },
@@ -138,9 +144,9 @@ export default function HomePage() {
 
     return (
         <div className="min-h-screen">
-            {urlQuery ? (
+            {urlQuery || urlGenres ? (
                 <GridView
-                    title={`Search results for "${urlQuery}"`}
+                    title={urlGenres ? `Genre: ${urlGenres}` : `Search results for "${urlQuery}"`}
                     infiniteQuery={searchResults as any}
                     emptyMessage="No results found."
                 />

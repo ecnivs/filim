@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useEffect, Fragment } from "react";
 import { ChevronLeft, Check, Play } from "lucide-react";
 import { Transition } from "@headlessui/react";
@@ -33,6 +34,7 @@ export function EpisodesPanel({
     onClose,
     seasons = []
 }: EpisodesPanelProps) {
+    const router = useRouter();
     const [mode, setMode] = useState<"episodes" | "seasons">("episodes");
     const [focusedEpisode, setFocusedEpisode] = useState<string | null>(null);
 
@@ -91,6 +93,7 @@ export function EpisodesPanel({
                                 >
                                     <Link
                                         href={`/watch/${animeId}/${ep.number}`}
+                                        replace
                                         className={`block ${isMobile ? "py-3.5 px-3" : "p-3"}`}
                                         onClick={onClose}
                                     >
@@ -161,7 +164,8 @@ export function EpisodesPanel({
                                         if (isActive) {
                                             setMode("episodes");
                                         } else {
-                                            window.location.href = `/watch/${s.id}/1`;
+                                            router.replace(`/watch/${s.id}/1`);
+                                            onClose();
                                         }
                                     }}
                                     className={`flex items-center justify-between w-full ${isMobile ? "px-4 py-3.5" : "px-6 py-4"} text-sm font-bold transition-all uppercase tracking-wider ${isActive

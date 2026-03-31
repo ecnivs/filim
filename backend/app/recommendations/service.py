@@ -152,11 +152,9 @@ class RecommendationService:
 
         if genre_counts:
             top_genre = genre_counts.most_common(1)[0][0]
-            results = await self.catalog.search(query=top_genre, page=1)
-            genre_lower = top_genre.lower()
-            filtered = [
-                r for r in results if any(tag.lower() == genre_lower for tag in r.tags)
-            ]
+            # Use native genre filtering for better accuracy and performance
+            filtered = await self.catalog.search(query="", genres=[top_genre], page=1)
+
             if len(filtered) >= 5:
                 return RecommendationSectionModel(
                     id="for_you",
@@ -256,30 +254,24 @@ class RecommendationService:
                 break
 
             try:
-                results = await self.catalog.search(query=genre, page=1)
-                if not results:
+                filtered = await self.catalog.search(query="", genres=[genre], page=1)
+                if not filtered:
                     continue
 
-                genre_lower = genre.lower()
-                filtered = [
-                    r
-                    for r in results
-                    if any(tag.lower() == genre_lower for tag in r.tags)
-                    and r.id not in seen_ids
-                ]
+                final_items = []
+                for r in filtered:
+                    if r.id not in seen_ids:
+                        final_items.append(AnimeSummaryModel.from_source(r))
+                        seen_ids.add(r.id)
+                    if len(final_items) >= 20:
+                        break
 
-                if filtered:
-                    section_items = [
-                        AnimeSummaryModel.from_source(r) for r in filtered[:20]
-                    ]
-                    for item in section_items:
-                        seen_ids.add(item.id)
-
+                if final_items:
                     sections.append(
                         RecommendationSectionModel(
                             id=f"genre_{genre.lower().replace(' ', '_')}_p{page}",
                             title=f"{genre} Anime",
-                            items=section_items,
+                            items=final_items,
                         )
                     )
             except Exception:

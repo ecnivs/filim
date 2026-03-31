@@ -36,3 +36,40 @@ TRENDING_WINDOW_DAYS = 30
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 DEFAULT_LOG_LEVEL = "INFO"
+
+# Common Genres for Search Optimization
+COMMON_GENRES = {
+    "Action",
+    "Adventure",
+    "Comedy",
+    "Drama",
+    "Fantasy",
+    "Horror",
+    "Mystery",
+    "Psychological",
+    "Romance",
+    "Sci-Fi",
+    "Slice of Life",
+    "Sports",
+    "Supernatural",
+    "Thriller",
+    "Mecha",
+    "Music",
+    "Slice of Life",
+    "Isekai",
+    "Seinen",
+    "Shounen",
+    "Shoujo",
+    "Josei",
+    "Historical",
+    "Martial Arts",
+    "Demons",
+    "Magic",
+    "Military",
+    "Super Power",
+    "Space",
+    "Vampire",
+    "Parody",
+    "Police",
+    "Samurai",
+}

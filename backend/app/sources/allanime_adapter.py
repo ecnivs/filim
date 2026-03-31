@@ -7,7 +7,7 @@ import httpx
 from pydantic import BaseModel
 from app.core.config import settings
 from app.core.cache import cache_response
-from app.core.constants import DEFAULT_USER_AGENT, MODE_SUB, MODE_DUB
+from app.core.constants import DEFAULT_USER_AGENT, MODE_SUB
 from app.sources.queries import (
     SEARCH_SHOWS_QUERY,
     SHOW_DETAILS_QUERY,
@@ -111,6 +111,7 @@ class AllAnimeSourceAdapter:
         query: str,
         mode: str = MODE_SUB,
         page: int = 1,
+        genres: list[str] | None = None,
     ) -> List[AnimeSummaryModel]:
         variables = {
             "search": {
@@ -123,6 +124,8 @@ class AllAnimeSourceAdapter:
             "translationType": mode,
             "countryOrigin": "ALL",
         }
+        if genres:
+            variables["search"]["genres"] = genres
         data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
         results: list[AnimeSummaryModel] = []
@@ -165,6 +168,7 @@ class AllAnimeSourceAdapter:
         limit: int = 20,
         page: int = 1,
         mode: str = MODE_SUB,
+        genres: list[str] | None = None,
     ) -> list[AnimeSummaryModel]:
         """Best-effort popular list for use as a fallback 'Trending' row.
 
@@ -184,6 +188,8 @@ class AllAnimeSourceAdapter:
             "translationType": mode,
             "countryOrigin": "ALL",
         }
+        if genres:
+            variables["search"]["genres"] = genres
         data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
         results: list[AnimeSummaryModel] = []

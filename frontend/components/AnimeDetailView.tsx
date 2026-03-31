@@ -270,7 +270,13 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                             <span className="text-xs text-neutral-500 font-bold">Genres:</span>
                             <div className="flex flex-wrap gap-2">
                                 {data.tags?.map(tag => (
-                                    <span key={tag} className="text-xs text-white hover:underline cursor-pointer">{tag}</span>
+                                    <Link
+                                        key={tag}
+                                        href={`/?genres=${encodeURIComponent(tag)}`}
+                                        className="text-xs text-white hover:text-ncyan hover:underline cursor-pointer transition-colors"
+                                    >
+                                        {tag}
+                                    </Link>
                                 ))}
                             </div>
                         </div>

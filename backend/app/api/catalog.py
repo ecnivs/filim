@@ -80,10 +80,12 @@ def _get_catalog_service(db: AsyncSession = Depends(get_db)) -> CatalogService:
 async def search_catalog(
     q: str = Query(..., min_length=1),
     page: int = Query(1, ge=1),
+    genres: str | None = Query(None),
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
 ) -> dict[str, list[AnimeSummaryResponse]]:
-    items = await catalog.search(query=q, mode=mode, page=page)
+    genre_list = [g.strip() for g in genres.split(",")] if genres else None
+    items = await catalog.search(query=q, mode=mode, page=page, genres=genre_list)
     return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
 
 

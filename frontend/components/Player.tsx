@@ -133,6 +133,7 @@ export function Player({
     const lastTimeRef = useRef<number>(0);
     const hasAppliedInitialTime = useRef(false);
     const lastSourceUrlRef = useRef<string | null>(null);
+    const lastEpisodeLabelRef = useRef<string | undefined>(episodeLabel);
     const seekBarRef = useRef<HTMLDivElement | null>(null);
     const [isMobileDevice, setIsMobileDevice] = useState(false);
     const [isCssLandscape, setIsCssLandscape] = useState(false);
@@ -204,15 +205,21 @@ export function Player({
             hlsRef.current = null;
         }
 
+        const isEpisodeSwitch = lastEpisodeLabelRef.current !== episodeLabel;
+
         if (!source || !source.url) {
+            if (isEpisodeSwitch) {
+                video.removeAttribute("src");
+                video.load();
+            }
             setIsBuffering(true);
             return;
         }
 
         const isHls = source.isHls ?? source.url.includes(".m3u8");
-        const isSourceSwitch = lastSourceUrlRef.current != null && lastSourceUrlRef.current !== source.url;
+        const isQualitySwitch = !isEpisodeSwitch && lastSourceUrlRef.current != null && lastSourceUrlRef.current !== source.url;
 
-        const resumeTime = isSourceSwitch && savedTime > 0
+        const resumeTime = isQualitySwitch && savedTime > 0
             ? savedTime
             : (initialTimeSecondsRef.current ?? 0);
 
@@ -223,6 +230,7 @@ export function Player({
                 lastTimeRef.current = resumeTime;
             }
             lastSourceUrlRef.current = source.url;
+            lastEpisodeLabelRef.current = episodeLabel;
         };
 
         if (isHls && Hls.isSupported()) {
@@ -1102,6 +1110,7 @@ export function Player({
                             <div className="mt-3 flex gap-2">
                                 <Link
                                     href={nextEpisodeHref}
+                                    replace
                                     className="inline-flex flex-1 items-center justify-center rounded bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-neutral-200"
                                 >
                                     Play next episode
@@ -1250,6 +1259,7 @@ export function Player({
                                         <>
                                             <Link
                                                 href={nextEpisodeHref || "#"}
+                                                replace
                                                 className={`flex items-center justify-center p-2 text-white transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-0 ${!nextEpisodeHref ? "opacity-20 grayscale pointer-events-none" : "hover:text-white"}`}
                                             >
                                                 <SkipForward className="h-5 w-5 sm:h-7 sm:w-7 fill-current" />
