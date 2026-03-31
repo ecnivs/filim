@@ -1,42 +1,40 @@
 from __future__ import annotations
 import os
 from functools import lru_cache
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from app.core import constants
 
 
-class Settings(BaseSettings):
-    """Application configuration loaded from environment variables."""
+class Settings:
+    """Application configuration using static constants for simplicity."""
 
-    model_config = SettingsConfigDict(
-        env_prefix="FILIM_", env_file=".env", extra="ignore"
-    )
+    def __init__(self):
+        self.environment: str = "development"
+        self.debug: bool = True
 
-    environment: str = "development"
-    debug: bool = True
+        self.host: str = constants.DEFAULT_HOST
+        self.port: int = constants.DEFAULT_PORT
 
-    host: str = "0.0.0.0"
-    port: int = 8000
+        self.allanime_api_url: str = constants.ALLANIME_API_URL
+        self.allanime_referer: str = constants.ALLANIME_REFERER
+        self.http_timeout_seconds: float = constants.HTTP_TIMEOUT_SECONDS
+
+        self.trending_window_days: int = constants.TRENDING_WINDOW_DAYS
+        self.log_level: str = constants.DEFAULT_LOG_LEVEL
+
+        self.cors_origins: list[str] = ["*"]
 
     @property
     def project_root(self) -> str:
+        """Returns the absolute root directory of the backend."""
         return os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         )
 
     @property
     def database_url(self) -> str:
+        """Dynamically calculates the SQLite path relative to the project root."""
         db_path = os.path.join(self.project_root, "filim.db")
         return f"sqlite+aiosqlite:///{db_path}"
-
-    allanime_api_url: str = "https://api.allanime.day/api"
-    allanime_referer: str = "https://allmanga.to"
-    http_timeout_seconds: float = 15.0
-
-    trending_window_days: int = 30
-
-    log_level: str = "INFO"
-
-    cors_origins: list[str] = ["*"]
 
 
 @lru_cache(maxsize=1)

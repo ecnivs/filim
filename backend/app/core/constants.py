@@ -25,3 +25,14 @@ DEFAULT_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/122.0 Safari/537.36"
 )
+
+# Source Configuration
+ALLANIME_API_URL = "https://api.allanime.day/api"
+ALLANIME_REFERER = "https://allmanga.to"
+HTTP_TIMEOUT_SECONDS = 15.0
+
+# Application Configuration
+TRENDING_WINDOW_DAYS = 30
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_PORT = 8000
+DEFAULT_LOG_LEVEL = "INFO"
