@@ -54,7 +54,7 @@ export function SectionRow({
     return (
         <>
             <section className={`relative -my-6 md:-my-10 group/row select-none transition-[z-index] duration-0 ${isOpen ? "z-50" : "z-40 hover:z-[60]"}`}>
-                <div className="flex items-center justify-between px-[4%] pb-2 md:pb-3 pt-8 md:pt-10 relative z-10">
+                <div className="flex items-center justify-between px-[4%] pb-2 md:pb-3 pt-5 md:pt-7 relative z-10">
                     <div className="flex items-center gap-2 md:gap-3">
                         <h2 className="text-[0.9rem] md:text-base lg:text-lg font-bold text-white leading-none">{title}</h2>
                         {hasItems && (

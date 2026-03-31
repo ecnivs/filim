@@ -2,6 +2,15 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.preferences import (
+        ProfileListEntry,
+        ProfileRating,
+        ProfileAudioPreference,
+    )
+    from app.models.devices import WatchProgress
 
 
 class Profile(Base):

@@ -14,9 +14,7 @@ type ContinueCardProps = {
     positionSeconds?: number;
     durationSeconds?: number;
     isInList?: boolean;
-    rating?: "like" | "dislike" | null;
     onToggleList?: () => void;
-    onSetRating?: (rating: "like" | "dislike" | null) => void;
     animeId?: string;
     widthClassName?: string;
 };
@@ -30,9 +28,7 @@ export function ContinueCard({
     positionSeconds,
     durationSeconds,
     isInList,
-    rating,
     onToggleList,
-    onSetRating,
     animeId,
     widthClassName = "w-[calc(92vw/3)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: ContinueCardProps) {
@@ -45,10 +41,6 @@ export function ContinueCard({
 
     return (
         <>
-            {/* ═══════════════════════════════════════════════════
-                DESKTOP CARD — portrait 2:3 with hover overlay
-                (hidden on mobile)
-               ═══════════════════════════════════════════════════ */}
             <div
                 className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 hover:z-50 cursor-pointer select-none hidden md:block`}
                 onClick={handleCardClick}
@@ -70,7 +62,6 @@ export function ContinueCard({
                         </div>
                     )}
 
-                    {/* Hover overlay */}
                     <div className="absolute inset-0 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 bg-gradient-to-t from-black/95 via-black/20 to-black/40 z-40">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1 scale-[0.8] origin-top-left">
@@ -116,44 +107,6 @@ export function ContinueCard({
                                                 </svg>
                                             )}
                                         </button>
-                                    )}
-                                    {onSetRating && (
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    onSetRating(rating === "like" ? null : "like");
-                                                }}
-                                                className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${rating === "like"
-                                                    ? "border-white bg-white text-black"
-                                                    : "border-neutral-500 text-neutral-400 hover:border-white hover:text-white"
-                                                    }`}
-                                                aria-label="Like"
-                                            >
-                                                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor">
-                                                    <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-                                                </svg>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    onSetRating(rating === "dislike" ? null : "dislike");
-                                                }}
-                                                className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${rating === "dislike"
-                                                    ? "border-white bg-white text-black"
-                                                    : "border-neutral-500 text-neutral-400 hover:border-white hover:text-white"
-                                                    }`}
-                                                aria-label="Dislike"
-                                            >
-                                                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 rotate-180" fill="currentColor">
-                                                    <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-                                                </svg>
-                                            </button>
-                                        </div>
                                     )}
                                     <button
                                         type="button"
@@ -206,10 +159,6 @@ export function ContinueCard({
                 </div>
             </div>
 
-            {/* ═══════════════════════════════════════════════════
-                MOBILE CARD — portrait 2:3 with always-visible info
-                (hidden on desktop)
-               ═══════════════════════════════════════════════════ */}
             <div
                 className={`relative flex-shrink-0 ${widthClassName} cursor-pointer select-none md:hidden active:scale-[0.97] transition-transform duration-150`}
                 onClick={handleCardClick}
@@ -231,7 +180,6 @@ export function ContinueCard({
                         </div>
                     )}
 
-                    {/* Centered play icon */}
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="flex items-center justify-center h-11 w-11 rounded-full bg-black/50 backdrop-blur-sm border border-white/20">
                             <svg viewBox="0 0 24 24" className="w-5 h-5 text-white ml-0.5" fill="currentColor">
@@ -240,10 +188,8 @@ export function ContinueCard({
                         </div>
                     </div>
 
-                    {/* Bottom gradient */}
                     <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
 
-                    {/* More Info button */}
                     {animeId && (
                         <button
                             type="button"
@@ -262,7 +208,6 @@ export function ContinueCard({
                         </button>
                     )}
 
-                    {/* Progress bar */}
                     {typeof progress === "number" && (
                         <div className="absolute inset-x-0 bottom-0 h-[3px] bg-neutral-700/80">
                             <div
@@ -273,7 +218,6 @@ export function ContinueCard({
                     )}
                 </div>
 
-                {/* Info below thumbnail */}
                 <div className="mt-2 px-0.5">
                     <p className="text-[0.7rem] font-semibold text-neutral-200 line-clamp-2 leading-tight">{title}</p>
                     <div className="flex items-center gap-2 mt-0.5">

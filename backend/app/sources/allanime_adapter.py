@@ -7,6 +7,7 @@ import httpx
 from pydantic import BaseModel
 from app.core.config import settings
 from app.core.cache import cache_response
+import html
 
 
 class AnimeSummaryModel(BaseModel):
@@ -78,9 +79,6 @@ class _AllAnimeClient:
             return data.get("data", {})
 
 
-import html
-
-
 def strip_html(text: str | None) -> str | None:
     if not text:
         return text
@@ -104,6 +102,7 @@ class AllAnimeSourceAdapter:
         self,
         query: str,
         mode: str = "sub",
+        page: int = 1,
     ) -> List[AnimeSummaryModel]:
         gql = (
             "query( $search: SearchInput $limit: Int $page: Int "
@@ -121,7 +120,7 @@ class AllAnimeSourceAdapter:
                 "allowUnknown": False,
             },
             "limit": 40,
-            "page": 1,
+            "page": page,
             "translationType": mode,
             "countryOrigin": "ALL",
         }

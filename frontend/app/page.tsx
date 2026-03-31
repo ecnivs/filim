@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 import Link from "next/link";
 import Image from "next/image";
@@ -8,6 +8,8 @@ import { AnimeCard, type AnimeSummaryCard as AnimeSummary } from "@/components/A
 import { SectionRow } from "@/components/SectionRow";
 import { useSearchParams } from "next/navigation";
 import { ContinueCard } from "@/components/ContinueCard";
+import { useEffect } from "react";
+import { useInView } from "react-intersection-observer";
 
 type ContinueWatchingItem = {
     anime_id: string;
@@ -28,7 +30,6 @@ type RecommendationSection = {
 type PreferenceItem = {
     anime_id: string;
     in_list: boolean;
-    rating?: "like" | "dislike" | null;
 };
 
 type PreferencesResponse = {
@@ -70,13 +71,35 @@ export default function HomePage() {
         }
     });
 
-    const trending = useQuery({
-        queryKey: ["trending"],
-        queryFn: async () => {
-            const res = await api.get<{ items: AnimeSummary[] }>("/catalog/trending");
-            return res.data.items;
-        }
+
+
+    const discovery = useInfiniteQuery({
+        queryKey: ["discovery"],
+        queryFn: async ({ pageParam = 1 }) => {
+            const res = await api.get<{ sections: RecommendationSection[] }>(
+                "/user/recommendations/discovery",
+                { params: { page: pageParam, limit: 3 } }
+            );
+            return res.data.sections;
+        },
+        getNextPageParam: (lastPage, allPages) => {
+            if (!lastPage || lastPage.length === 0) return undefined;
+            if (allPages.length >= 500) return undefined;
+            return allPages.length + 1;
+        },
+        initialPageParam: 1,
     });
+
+    const { ref, inView } = useInView({
+        threshold: 0,
+        rootMargin: "400px",
+    });
+
+    useEffect(() => {
+        if (inView && discovery.hasNextPage && !discovery.isFetchingNextPage) {
+            void discovery.fetchNextPage();
+        }
+    }, [inView, discovery.hasNextPage, discovery.isFetchingNextPage, discovery.fetchNextPage]);
 
     const searchResults = useQuery({
         queryKey: ["search", urlQuery],
@@ -91,11 +114,10 @@ export default function HomePage() {
 
     const featuredAnime = (() => {
         const candidates = [
-            ...(trending.data || []),
             ...(recommendations.data?.flatMap((s) => s.items) || [])
         ];
         return candidates.find((a) => a.poster_image_url && a.poster_image_url.startsWith("http"));
-    })() as AnimeSummary | undefined;
+    })();
 
     const billboardResumeHref = (() => {
         if (!featuredAnime) return "#";
@@ -122,30 +144,14 @@ export default function HomePage() {
         }
     });
 
-    const updateRating = useMutation({
-        mutationFn: async (payload: { animeId: string; rating: "like" | "dislike" | null }) => {
-            await api.post("/user/preferences/rating", {
-                anime_id: payload.animeId,
-                rating: payload.rating
-            });
-        },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ["preferences"] });
-        }
-    });
-
     const handleToggleList = (animeId: string) => {
         const current = getPreferenceForAnime(animeId);
         const nextInList = !current?.in_list;
         toggleList.mutate({ animeId, inList: nextInList });
     };
 
-    const handleSetRating = (animeId: string, rating: "like" | "dislike" | null) => {
-        updateRating.mutate({ animeId, rating });
-    };
-
     return (
-        <div className="pb-16">
+        <div className="min-h-screen">
             {urlQuery ? (
                 <div className="px-[4%] pt-20 md:pt-24 pb-12">
                     <h2 className="text-xl md:text-2xl font-black text-white mb-6">
@@ -162,13 +168,8 @@ export default function HomePage() {
                                     key={anime.id}
                                     anime={anime}
                                     isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
-                                    rating={getPreferenceForAnime(anime.id)?.rating ?? null}
                                     onToggleList={() => handleToggleList(anime.id)}
                                     widthClassName="w-full"
-                                    onSetRating={(next: "like" | "dislike" | null) => {
-                                        if (!next) return;
-                                        handleSetRating(anime.id, next);
-                                    }}
                                 />
                             ))}
                         </div>
@@ -226,7 +227,7 @@ export default function HomePage() {
                         </section>
                     )}
 
-                    <div className="relative z-10 -mt-10 md:-mt-16 space-y-8 md:space-y-12 pb-20">
+                    <div className="relative z-10 -mt-10 md:-mt-16 space-y-4 md:space-y-6 pb-4">
                         {continueWatching.data && continueWatching.data.length > 0 && (
                             <SectionRow title="Continue Watching">
                                 {continueWatching.data
@@ -254,11 +255,7 @@ export default function HomePage() {
                                                 positionSeconds={item.position_seconds}
                                                 durationSeconds={item.duration_seconds}
                                                 isInList={pref?.in_list ?? false}
-                                                rating={pref?.rating ?? null}
                                                 onToggleList={() => handleToggleList(item.anime_id)}
-                                                onSetRating={(next: "like" | "dislike" | null) => {
-                                                    handleSetRating(item.anime_id, next);
-                                                }}
                                                 animeId={item.anime_id}
                                             />
                                         );
@@ -273,33 +270,60 @@ export default function HomePage() {
                                         key={anime.id}
                                         anime={anime}
                                         isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
-                                        rating={getPreferenceForAnime(anime.id)?.rating ?? null}
                                         onToggleList={() => handleToggleList(anime.id)}
-                                        onSetRating={(next: "like" | "dislike" | null) => {
-                                            if (!next) return;
-                                            handleSetRating(anime.id, next);
-                                        }}
                                     />
                                 ))}
                             </SectionRow>
                         ))}
 
-                        {trending.data && trending.data.length > 0 && (
-                            <SectionRow title="Trending Now">
-                                {trending.data.map((anime) => (
-                                    <AnimeCard
-                                        key={anime.id}
-                                        anime={anime}
-                                        isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
-                                        rating={getPreferenceForAnime(anime.id)?.rating ?? null}
-                                        onToggleList={() => handleToggleList(anime.id)}
-                                        onSetRating={(next: "like" | "dislike" | null) => {
-                                            handleSetRating(anime.id, next);
-                                        }}
-                                    />
-                                ))}
-                            </SectionRow>
+
+
+                        {/* Infinite Discovery Rows */}
+                        {discovery.data?.pages.map((page) =>
+                            page.map((section) => (
+                                <SectionRow key={section.id} title={section.title}>
+                                    {section.items.map((anime) => (
+                                        <AnimeCard
+                                            key={anime.id}
+                                            anime={anime}
+                                            isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
+                                            onToggleList={() => handleToggleList(anime.id)}
+                                        />
+                                    ))}
+                                </SectionRow>
+                            ))
                         )}
+
+                        {/* Intersection Observer Trigger & Completion Message */}
+                        <div ref={ref} className="min-h-[80px] flex items-center justify-center w-full">
+                            {discovery.isFetchingNextPage ? (
+                                <div className="flex flex-col items-center gap-2 py-4">
+                                    <div className="flex gap-1">
+                                        <div className="w-1.5 h-1.5 bg-ncyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                        <div className="w-1.5 h-1.5 bg-ncyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                        <div className="w-1.5 h-1.5 bg-ncyan rounded-full animate-bounce"></div>
+                                    </div>
+                                </div>
+                            ) : !discovery.hasNextPage && discovery.data && discovery.data.pages.length > 0 ? (
+                                <div className="py-8 text-center animate-fade-in w-full max-w-2xl mx-auto px-4">
+                                    <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-800 to-transparent mb-6" />
+                                    <div className="space-y-2">
+                                        <h3 className="text-base md:text-lg font-bold text-white/70">
+                                            That’s all for now.
+                                        </h3>
+                                        <p className="text-[10px] md:text-xs text-neutral-600 font-medium max-w-md mx-auto uppercase tracking-widest">
+                                            You&apos;ve reached the end
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                                        className="mt-6 text-[10px] font-bold text-neutral-500 hover:text-ncyan transition-colors uppercase tracking-[0.2em] border border-neutral-800/50 px-4 py-1.5 rounded-full"
+                                    >
+                                        Back to Top ↑
+                                    </button>
+                                </div>
+                            ) : null}
+                        </div>
                     </div>
                 </>
             )}

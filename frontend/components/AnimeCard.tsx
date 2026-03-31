@@ -4,6 +4,9 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/http";
+
 export type AnimeSummaryCard = {
     id: string;
     title: string;
@@ -20,21 +23,16 @@ export type AnimeCardProps = {
     anime: AnimeSummaryCard;
     href?: string;
     isInList?: boolean;
-    rating?: "like" | "dislike" | null;
     onToggleList?: () => void;
-    onSetRating?: (rating: "like" | "dislike" | null) => void;
     widthClassName?: string;
+    variant?: "standard" | "simple";
 };
-
-import { useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/http";
 
 export function AnimeCard({
     anime,
     isInList,
-    rating,
     onToggleList,
-    onSetRating,
+    variant = "standard",
     widthClassName = "w-[calc(92vw/3)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: AnimeCardProps) {
     const queryClient = useQueryClient();
@@ -70,12 +68,11 @@ export function AnimeCard({
 
     return (
         <div
-            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 md:group-hover/row-inner:opacity-30 md:hover:!opacity-100 md:hover:z-50 cursor-pointer select-none active:scale-[0.97] md:active:scale-100`}
+            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 ${variant === 'standard' ? 'md:group-hover/row-inner:opacity-30 md:hover:!opacity-100 md:hover:z-50' : ''} cursor-pointer select-none active:scale-[0.97] md:active:scale-100`}
             onClick={handleCardClick}
             onMouseEnter={prefetchDetails}
         >
-            {/* ── Desktop: hover-expand poster ── */}
-            <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out md:group-hover/card:scale-[1.25] md:group-hover/card:z-30 md:group-hover/card:delay-[100ms]">
+            <div className={`relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out ${variant === 'standard' ? 'md:group-hover/card:scale-[1.25] md:group-hover/card:z-30 md:group-hover/card:delay-[100ms]' : ''}`}>
                 {anime.poster_image_url && !imageFailed ? (
                     <Image
                         src={anime.poster_image_url}
@@ -92,7 +89,6 @@ export function AnimeCard({
                     </div>
                 )}
 
-                {/* ── Desktop-only hover overlay ── */}
                 <div className="absolute inset-0 opacity-0 hidden md:flex md:group-hover/card:opacity-100 transition-opacity duration-300 flex-col justify-between p-3 bg-gradient-to-t from-black/95 via-black/20 to-black/40 z-40">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1 scale-[0.8] origin-top-left">
@@ -139,44 +135,6 @@ export function AnimeCard({
                                         )}
                                     </button>
                                 )}
-                                {onSetRating && (
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                onSetRating(rating === "like" ? null : "like");
-                                            }}
-                                            className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${rating === "like"
-                                                ? "border-white bg-white text-black"
-                                                : "border-neutral-500 text-neutral-400 hover:border-white hover:text-white"
-                                                }`}
-                                            aria-label="Like"
-                                        >
-                                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor">
-                                                <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                onSetRating(rating === "dislike" ? null : "dislike");
-                                            }}
-                                            className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${rating === "dislike"
-                                                ? "border-white bg-white text-black"
-                                                : "border-neutral-500 text-neutral-400 hover:border-white hover:text-white"
-                                                }`}
-                                            aria-label="Dislike"
-                                        >
-                                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 rotate-180" fill="currentColor">
-                                                <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                )}
                             </div>
 
                             <button
@@ -194,13 +152,13 @@ export function AnimeCard({
                             </button>
                         </div>
 
-                        <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+                        <div className={`space-y-1 ${variant === 'simple' ? 'hidden' : 'block'}`} onClick={(e) => e.stopPropagation()}>
                             <p className="text-[0.65rem] font-black text-white leading-tight line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
                                 {anime.title}
                             </p>
                             {anime.tags && anime.tags.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-1.5 text-[0.55rem] text-neutral-300">
-                                    {anime.tags.slice(0, 2).map((tag, i) => (
+                                    {anime.tags.slice(0, 2).map((tag: string, i: number) => (
                                         <span key={tag} className="flex items-center gap-1.5">
                                             {i > 0 && <span className="text-neutral-600 text-[8px]">•</span>}
                                             {tag}
@@ -212,16 +170,18 @@ export function AnimeCard({
                     </div>
                 </div>
 
-                {/* ── Desktop-only: gradient + title at bottom (fades on hover) ── */}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent h-1/3 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none" />
-                <div className="absolute inset-x-0 bottom-0 p-2.5 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none">
-                    <p className="text-[0.75rem] font-semibold text-white line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{anime.title}</p>
-                </div>
+                {variant === "standard" && (
+                    <>
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent h-1/3 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none" />
+                        <div className="absolute inset-x-0 bottom-0 p-2.5 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none">
+                            <p className="text-[0.75rem] font-semibold text-white line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{anime.title}</p>
+                        </div>
+                    </>
+                )}
 
             </div>
 
-            {/* ── Mobile-only: title below the card ── */}
-            <div className="mt-1.5 md:hidden px-0.5">
+            <div className={`mt-1.5 px-0.5 ${variant === 'standard' ? 'md:hidden' : 'block'}`}>
                 <p className="text-[0.7rem] font-semibold text-neutral-200 line-clamp-2 leading-tight">{anime.title}</p>
                 {subtitle && (
                     <p className="text-[0.6rem] text-neutral-500 mt-0.5">{subtitle}</p>

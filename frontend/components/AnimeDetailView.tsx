@@ -33,23 +33,20 @@ type RecommendationSection = {
 type PreferenceItem = {
     anime_id: string;
     in_list: boolean;
-    rating?: "like" | "dislike" | null;
 };
 
 interface AnimeDetailViewProps {
     id: string;
     initialData?: AnimeDetails;
-    onClose?: () => void;
 }
 
-export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewProps) {
+export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
     const queryClient = useQueryClient();
     const router = useRouter();
 
     const {
         data,
-        isLoading,
-        isError
+        isLoading
     } = useQuery({
         queryKey: ["anime", id],
         initialData,
@@ -114,17 +111,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
         }
     });
 
-    const updateRating = useMutation({
-        mutationFn: async (payload: { animeId: string; rating: "like" | "dislike" | null }) => {
-            await api.post("/user/preferences/rating", {
-                anime_id: payload.animeId,
-                rating: payload.rating
-            });
-        },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ["preferences"] });
-        }
-    });
+
 
     const series = useQuery({
         queryKey: ["anime-series", id],
@@ -145,6 +132,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
     const currentSeason = filteredSeasons.find(s => s.id === id) || filteredSeasons[0];
 
     const [synopsisExpanded, setSynopsisExpanded] = useState(false);
+    const [showAllEpisodes, setShowAllEpisodes] = useState(false);
 
     if (isLoading || !data) {
         return (
@@ -169,11 +157,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
         toggleList.mutate({ animeId, inList: nextInList });
     };
 
-    const handleSetRating = (animeId: string, rating: "like" | "dislike") => {
-        const current = getPreferenceForAnime(animeId);
-        const nextRating = current?.rating === rating ? null : rating;
-        updateRating.mutate({ animeId, rating: nextRating });
-    };
+
 
     const sortedEpisodes = [...data.episodes].sort((a, b) => {
         const numA = parseFloat(a.number);
@@ -234,17 +218,6 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                                     <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                                 </svg>
                             )}
-                        </button>
-                        <button
-                            onClick={() => handleSetRating(data.id, "like")}
-                            className={`flex h-9 w-9 md:h-11 md:w-11 items-center justify-center rounded-full border-2 transition-colors bg-black/40 ${getPreferenceForAnime(data.id)?.rating === "like"
-                                ? "border-white bg-white text-black"
-                                : "border-neutral-400 text-white hover:border-white"
-                                }`}
-                        >
-                            <svg viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5" fill="currentColor">
-                                <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-                            </svg>
                         </button>
                     </div>
                 </div>
@@ -322,7 +295,7 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                     </div>
 
                     <div className="flex flex-col gap-1">
-                        {sortedEpisodes.map((ep, idx) => {
+                        {(showAllEpisodes ? sortedEpisodes : sortedEpisodes.slice(0, 10)).map((ep, idx) => {
                             const epProgress = animeProgress.data?.find(p => p.episode === ep.number);
                             const progressPercent = epProgress ? Math.min(Math.max(epProgress.progress * 100, 0), 100) : 0;
 
@@ -389,22 +362,33 @@ export function AnimeDetailView({ id, initialData, onClose }: AnimeDetailViewPro
                             );
                         })}
                     </div>
+
+                    {sortedEpisodes.length > 10 && (
+                        <button
+                            onClick={() => setShowAllEpisodes(!showAllEpisodes)}
+                            className="w-full flex items-center justify-center py-4 mt-2 border border-white/10 rounded-lg bg-neutral-900/40 hover:bg-neutral-800 transition-colors text-white group"
+                        >
+                            <span className="text-sm font-semibold mr-2">{showAllEpisodes ? "Show Less" : "Show More"}</span>
+                            <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-300 ${showAllEpisodes ? "rotate-180" : "group-hover:translate-y-1"}`} fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                    )}
                 </section>
 
                 {/* More Like This */}
-                {moreLikeThis && moreLikeThis.items.length > 0 && (
+                {moreLikeThis && moreLikeThis.items.filter(item => item.id !== data.id).length > 0 && (
                     <section className="space-y-4 md:space-y-6">
                         <h2 className="text-xl md:text-2xl font-black text-white">More Like This</h2>
                         <div className="grid grid-cols-3 sm:grid-cols-3 gap-x-2 gap-y-6 md:gap-4">
-                            {moreLikeThis.items.slice(0, 6).map(anime => (
+                            {moreLikeThis.items.filter(item => item.id !== data.id).slice(0, 6).map(anime => (
                                 <AnimeCard
                                     key={anime.id}
                                     anime={anime}
                                     isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
-                                    rating={getPreferenceForAnime(anime.id)?.rating ?? null}
                                     onToggleList={() => handleToggleList(anime.id)}
-                                    onSetRating={(next) => next && handleSetRating(anime.id, next)}
                                     widthClassName="w-full"
+                                    variant="simple"
                                 />
                             ))}
                         </div>

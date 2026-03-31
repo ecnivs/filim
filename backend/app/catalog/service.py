@@ -1,10 +1,7 @@
 from __future__ import annotations
-
 from collections.abc import Sequence
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models import Anime, AnimeStats
 from app.sources import AllAnimeSourceAdapter, AnimeSummaryModel, EpisodeSummaryModel
 
@@ -16,8 +13,10 @@ class CatalogService:
         self.db = db
         self.source = source or AllAnimeSourceAdapter()
 
-    async def search(self, query: str, mode: str = "sub") -> list[AnimeSummaryModel]:
-        results = await self.source.search_shows(query=query, mode=mode)
+    async def search(
+        self, query: str, mode: str = "sub", page: int = 1
+    ) -> list[AnimeSummaryModel]:
+        results = await self.source.search_shows(query=query, mode=mode, page=page)
         if not results:
             return []
 
