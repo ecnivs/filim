@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    cors_origins: list[str] = ["*"]
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

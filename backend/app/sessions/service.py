@@ -79,18 +79,23 @@ class SessionService:
 
         if not profile_id or not is_valid_uuid(profile_id):
             profile_id = None
+            is_guest = False
         else:
-            # Verify profile exists before using it to prevent FK constraint failures
             from app.models.profiles import Profile
 
-            result = await self.db.scalar(
-                select(Profile.id).where(Profile.id == profile_id)
-            )
-            if not result:
+            profile_row = await self.db.get(Profile, profile_id)
+            if not profile_row:
                 logger.warning(
                     "Stale profile_id %r, falling back to device-level", profile_id
                 )
                 profile_id = None
+                is_guest = False
+            else:
+                is_guest = profile_row.is_guest
+
+        if is_guest:
+            # Guest profiles do not save progress
+            return
 
         try:
             device = await self.resolve_device(
@@ -151,16 +156,20 @@ class SessionService:
         from app.models.profiles import Profile
 
         if profile_id and is_valid_uuid(profile_id):
-            result = await self.db.scalar(
-                select(Profile.id).where(Profile.id == profile_id)
-            )
-            if not result:
+            profile_row = await self.db.get(Profile, profile_id)
+            if not profile_row:
                 profile_id = None
+                is_guest = False
+            else:
+                is_guest = profile_row.is_guest
         else:
             profile_id = None
+            is_guest = False
+
+        if is_guest:
+            return []
 
         if profile_id is None:
-            # Fallback for anon/stale-profile device-level history
             device = await self.resolve_device(
                 device_token=device_token, client_ip=client_ip
             )
@@ -239,13 +248,18 @@ class SessionService:
         from app.models.profiles import Profile
 
         if profile_id and is_valid_uuid(profile_id):
-            result = await self.db.scalar(
-                select(Profile.id).where(Profile.id == profile_id)
-            )
-            if not result:
+            profile_row = await self.db.get(Profile, profile_id)
+            if not profile_row:
                 profile_id = None
+                is_guest = False
+            else:
+                is_guest = profile_row.is_guest
         else:
             profile_id = None
+            is_guest = False
+
+        if is_guest:
+            return []
 
         if profile_id is None:
             device = await self.resolve_device(

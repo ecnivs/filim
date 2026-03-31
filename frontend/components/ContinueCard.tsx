@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { formatTime } from "@/lib/utils";
+import { useProfile } from "@/lib/profile-context";
 
 type ContinueCardProps = {
     title: string;
@@ -33,6 +34,7 @@ export function ContinueCard({
     widthClassName = "w-[calc(92vw/3)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: ContinueCardProps) {
     const router = useRouter();
+    const { profile } = useProfile();
     const [imageFailed, setImageFailed] = useState(false);
 
     const handleCardClick = () => {
@@ -84,7 +86,7 @@ export function ContinueCard({
                                             <path d="M6 4l15 8-15 8V4z" />
                                         </svg>
                                     </button>
-                                    {onToggleList && (
+                                    {onToggleList && !profile?.is_guest && (
                                         <button
                                             type="button"
                                             onClick={(e) => {

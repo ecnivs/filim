@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/http";
+import { useProfile } from "@/lib/profile-context";
 
 export type AnimeSummaryCard = {
     id: string;
@@ -38,6 +39,7 @@ export function AnimeCard({
 }: AnimeCardProps) {
     const queryClient = useQueryClient();
     const router = useRouter();
+    const { profile } = useProfile();
     const playHref = `/watch/${anime.id}/1`;
     const infoHref = `/anime/${anime.id}`;
 
@@ -112,7 +114,7 @@ export function AnimeCard({
                                         <path d="M6 4l15 8-15 8V4z" />
                                     </svg>
                                 </button>
-                                {onToggleList && (
+                                {onToggleList && !profile?.is_guest && (
                                     <button
                                         type="button"
                                         onClick={(e) => {

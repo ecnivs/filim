@@ -10,6 +10,7 @@ type Profile = {
     id: string;
     name: string;
     is_locked: boolean;
+    is_guest: boolean;
 };
 
 type ProfilesResponse = {
@@ -74,7 +75,11 @@ export default function ProfilesPage() {
             setPinError(null);
             setUnlockingProfile(null);
             setPinInput("");
-            setProfile({ id: variables.profile.id, name: variables.profile.name });
+            setProfile({
+                id: variables.profile.id,
+                name: variables.profile.name,
+                is_guest: variables.profile.is_guest
+            });
             window.location.href = "/";
         },
         onError: () => {
@@ -89,7 +94,7 @@ export default function ProfilesPage() {
             setPinError(null);
             return;
         }
-        setProfile({ id: p.id, name: p.name });
+        setProfile({ id: p.id, name: p.name, is_guest: p.is_guest });
         window.location.href = "/";
     };
 

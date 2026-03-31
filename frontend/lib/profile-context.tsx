@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 type ActiveProfile = {
     id: string;
     name: string;
+    is_guest?: boolean;
 };
 
 type ProfileContextValue = {
@@ -43,7 +44,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
                         });
 
                         if (res.ok) {
-                            setProfileState(parsed);
+                            const data = await res.json();
+                            setProfileState({
+                                id: data.id,
+                                name: data.name,
+                                is_guest: data.is_guest
+                            });
                         } else {
                             window.localStorage.removeItem(STORAGE_KEY);
                             setProfileState(null);

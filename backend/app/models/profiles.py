@@ -19,6 +19,7 @@ class Profile(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     pin_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_guest: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

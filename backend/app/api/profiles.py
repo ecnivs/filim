@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.db.session import get_db
 from app.profiles import ProfileModel, ProfileService
 
@@ -10,10 +9,16 @@ class ProfileResponse(BaseModel):
     id: str
     name: str
     is_locked: bool
+    is_guest: bool
 
     @classmethod
     def from_model(cls, model: ProfileModel) -> "ProfileResponse":
-        return cls(id=model.id, name=model.name, is_locked=model.is_locked)
+        return cls(
+            id=model.id,
+            name=model.name,
+            is_locked=model.is_locked,
+            is_guest=model.is_guest,
+        )
 
 
 class CreateProfileBody(BaseModel):
@@ -87,7 +92,10 @@ async def delete_profile(
     profile_id: str,
     service: ProfileService = Depends(_get_profile_service),
 ) -> dict[str, str]:
-    await service.delete_profile(profile_id)
+    try:
+        await service.delete_profile(profile_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok"}
 
 

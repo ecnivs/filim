@@ -116,7 +116,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                         )}
                         {pathname !== "/profiles" && (
                             <nav className="hidden md:flex items-center gap-6 text-sm">
-                                {NAV_ITEMS.map((item) => {
+                                {NAV_ITEMS.filter(item => !(profile?.is_guest && item.label === "My List")).map((item) => {
                                     const isActive =
                                         item.href === "/"
                                             ? pathname === "/"
@@ -216,7 +216,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
             {pathname !== "/profiles" && !searchParams.get("q") && (
                 <nav className="absolute top-0 left-0 right-0 z-40 flex md:hidden overflow-x-auto scrollbar-none items-center gap-3 pt-14 pb-2 px-[4%] transition-all duration-300">
                     <div className="flex items-center gap-2 flex-nowrap">
-                        {NAV_ITEMS.filter(item => item.label !== "Home").map((item) => {
+                        {NAV_ITEMS.filter(item => item.label !== "Home" && !(profile?.is_guest && item.label === "My List")).map((item) => {
                             const isActive =
                                 item.href === "/"
                                     ? pathname === "/"
@@ -268,7 +268,7 @@ function ProfileDropdownItems({ currentId }: { currentId?: string }) {
     const { data: profiles } = useQuery({
         queryKey: ["profiles"],
         queryFn: async () => {
-            const res = await api.get<{ items: { id: string, name: string }[] }>("/profiles");
+            const res = await api.get<{ items: { id: string, name: string, is_guest: boolean }[] }>("/profiles");
             return res.data.items;
         }
     });
@@ -281,7 +281,7 @@ function ProfileDropdownItems({ currentId }: { currentId?: string }) {
                 <button
                     key={p.id}
                     onClick={() => {
-                        setProfile({ id: p.id, name: p.name });
+                        setProfile({ id: p.id, name: p.name, is_guest: p.is_guest });
                         window.location.href = "/";
                     }}
                     className="w-full flex items-center gap-2 group/item px-1 py-1 rounded hover:bg-white/5 transition-colors"

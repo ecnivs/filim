@@ -293,14 +293,23 @@ class RecommendationService:
         profile_id: str | None = None,
     ) -> List[RecommendationSectionModel]:
         sections: list[RecommendationSectionModel] = []
+        is_guest = False
 
-        for_you = await self.get_for_you_section(profile_id=profile_id)
-        sections.append(for_you)
+        if profile_id:
+            from app.models.profiles import Profile
+
+            profile = await self.db.get(Profile, profile_id)
+            if profile and profile.is_guest:
+                is_guest = True
+
+        if not is_guest:
+            for_you = await self.get_for_you_section(profile_id=profile_id)
+            sections.append(for_you)
 
         trending = await self.get_trending_section()
         sections.append(trending)
 
-        if profile_id:
+        if profile_id and not is_guest:
             my_list = await self.get_my_list_section(profile_id=profile_id)
             if my_list:
                 sections.append(my_list)

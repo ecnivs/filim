@@ -4,6 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Anime, AnimeStats
 from app.sources import AllAnimeSourceAdapter, AnimeSummaryModel, EpisodeSummaryModel
+from app.core.utils import normalize_title
+from app.core.constants import MODE_SUB, SUPPORTED_RELATIONS
 
 
 class CatalogService:
@@ -14,19 +16,35 @@ class CatalogService:
         self.source = source or AllAnimeSourceAdapter()
 
     async def search(
-        self, query: str, mode: str = "sub", page: int = 1
+        self, query: str, mode: str = MODE_SUB, page: int = 1
     ) -> list[AnimeSummaryModel]:
         results = await self.source.search_shows(query=query, mode=mode, page=page)
+        return self._deduplicate_results(results)
+
+    def _deduplicate_results(
+        self, results: list[AnimeSummaryModel]
+    ) -> list[AnimeSummaryModel]:
         if not results:
             return []
 
         merged: dict[str, AnimeSummaryModel] = {}
+        seen_ids: set[str] = set()
+
         for item in results:
-            key = (item.english_title or item.title).lower().strip()
-            if key not in merged:
-                merged[key] = item
+            if item.id and item.id in seen_ids:
+                continue
+
+            title = item.english_title or item.title
+            clean_title = normalize_title(title)
+
+            if clean_title not in merged:
+                merged[clean_title] = item
+                if item.id:
+                    seen_ids.add(item.id)
             else:
-                pass
+                existing = merged[clean_title]
+                if (item.episode_count or 0) > (existing.episode_count or 0):
+                    merged[clean_title] = item
 
         return list(merged.values())
 
@@ -84,7 +102,7 @@ class CatalogService:
     async def get_show_details(
         self,
         anime_id: str,
-        mode: str = "sub",
+        mode: str = MODE_SUB,
         search_query: str | None = None,
     ) -> AnimeSummaryModel:
         """Return show metadata, with fallbacks for IDs that only resolve via search."""
@@ -118,7 +136,7 @@ class CatalogService:
     async def get_episode_list(
         self,
         anime_id: str,
-        mode: str = "sub",
+        mode: str = MODE_SUB,
         search_query: str | None = None,
     ) -> list[EpisodeSummaryModel]:
         episodes = await self.source.get_episode_list(show_id=anime_id, mode=mode)
@@ -174,26 +192,29 @@ class CatalogService:
                         banner_image_url=anime.cover_image_url,
                     )
                 )
-            return results
+            return self._deduplicate_results(results)
 
-        return await self.source.get_popular_shows(limit=limit, page=page)
+        popular = await self.source.get_popular_shows(limit=limit, page=page)
+        return self._deduplicate_results(popular)
 
     async def get_shows(
-        self, limit: int = 40, page: int = 1, mode: str = "sub"
+        self, limit: int = 40, page: int = 1, mode: str = MODE_SUB
     ) -> list[AnimeSummaryModel]:
         """Return popular TV shows (more than 1 episode)."""
         popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
-        return [s for s in popular if (s.episode_count or 0) > 1]
+        filtered = [s for s in popular if (s.episode_count or 0) > 1]
+        return self._deduplicate_results(filtered)
 
     async def get_movies(
-        self, limit: int = 40, page: int = 1, mode: str = "sub"
+        self, limit: int = 40, page: int = 1, mode: str = MODE_SUB
     ) -> list[AnimeSummaryModel]:
         """Return popular Movies (exactly 1 episode)."""
         popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
-        return [s for s in popular if (s.episode_count or 0) == 1]
+        filtered = [s for s in popular if (s.episode_count or 0) == 1]
+        return self._deduplicate_results(filtered)
 
     async def get_series_lineup(
-        self, anime_id: str, mode: str = "sub"
+        self, anime_id: str, mode: str = MODE_SUB
     ) -> list[AnimeSummaryModel]:
         """Fetch all related seasons/shows for a given anime to build a series lineup.
 
@@ -210,13 +231,7 @@ class CatalogService:
             rel_id = rel.get("showId")
             relation = (rel.get("relation") or "").lower()
 
-            if relation not in [
-                "sequel",
-                "prequel",
-                "side_story",
-                "parent_story",
-                "alternative_setting",
-            ]:
+            if relation not in SUPPORTED_RELATIONS:
                 continue
 
             if not rel_id or any(item.id == rel_id for item in lineup):

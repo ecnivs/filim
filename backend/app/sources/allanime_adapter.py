@@ -7,7 +7,15 @@ import httpx
 from pydantic import BaseModel
 from app.core.config import settings
 from app.core.cache import cache_response
+from app.core.constants import DEFAULT_USER_AGENT, MODE_SUB, MODE_DUB
+from app.sources.queries import (
+    SEARCH_SHOWS_QUERY,
+    SHOW_DETAILS_QUERY,
+    EPISODE_LIST_QUERY,
+    EPISODE_METADATA_QUERY,
+)
 import html
+import logging
 
 
 class AnimeSummaryModel(BaseModel):
@@ -53,11 +61,7 @@ class _AllAnimeClient:
         async with httpx.AsyncClient(
             base_url=self.base_url,
             headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (X11; Linux x86_64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/122.0 Safari/537.36"
-                ),
+                "User-Agent": DEFAULT_USER_AGENT,
                 "Referer": self.referer,
                 "Content-Type": "application/json",
             },
@@ -72,11 +76,13 @@ class _AllAnimeClient:
                     },
                 )
                 response.raise_for_status()
-            except httpx.HTTPError:
+            except httpx.HTTPError as e:
+                logging.error(f"GraphQL request failed: {e}")
                 return {}
 
             data = response.json()
             if "errors" in data:
+                logging.error(f"GraphQL returns errors: {data['errors']}")
                 return {}
             return data.get("data", {})
 
@@ -103,18 +109,9 @@ class AllAnimeSourceAdapter:
     async def search_shows(
         self,
         query: str,
-        mode: str = "sub",
+        mode: str = MODE_SUB,
         page: int = 1,
     ) -> List[AnimeSummaryModel]:
-        gql = (
-            "query( $search: SearchInput $limit: Int $page: Int "
-            "$translationType: VaildTranslationTypeEnumType "
-            "$countryOrigin: VaildCountryOriginEnumType ) { "
-            "shows( search: $search limit: $limit page: $page "
-            "translationType: $translationType countryOrigin: $countryOrigin ) { "
-            "edges { _id name englishName altNames description genres thumbnail banner "
-            "type availableEpisodesDetail __typename } } }"
-        )
         variables = {
             "search": {
                 "query": query,
@@ -126,7 +123,7 @@ class AllAnimeSourceAdapter:
             "translationType": mode,
             "countryOrigin": "ALL",
         }
-        data = await self._client.query(gql, variables)
+        data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
         results: list[AnimeSummaryModel] = []
         for edge in edges:
@@ -167,7 +164,7 @@ class AllAnimeSourceAdapter:
         self,
         limit: int = 20,
         page: int = 1,
-        mode: str = "sub",
+        mode: str = MODE_SUB,
     ) -> list[AnimeSummaryModel]:
         """Best-effort popular list for use as a fallback 'Trending' row.
 
@@ -176,15 +173,6 @@ class AllAnimeSourceAdapter:
         ordering.
         """
 
-        gql = (
-            "query( $search: SearchInput $limit: Int $page: Int "
-            "$translationType: VaildTranslationTypeEnumType "
-            "$countryOrigin: VaildCountryOriginEnumType ) { "
-            "shows( search: $search limit: $limit page: $page "
-            "translationType: $translationType countryOrigin: $countryOrigin ) { "
-            "edges { _id name englishName altNames description genres thumbnail banner "
-            "type availableEpisodesDetail __typename } } }"
-        )
         variables = {
             "search": {
                 "query": "",
@@ -196,7 +184,7 @@ class AllAnimeSourceAdapter:
             "translationType": mode,
             "countryOrigin": "ALL",
         }
-        data = await self._client.query(gql, variables)
+        data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
         results: list[AnimeSummaryModel] = []
         for edge in edges:
@@ -236,24 +224,10 @@ class AllAnimeSourceAdapter:
     async def get_show_details(
         self,
         show_id: str,
-        mode: str = "sub",
+        mode: str = MODE_SUB,
     ) -> AnimeSummaryModel:
-        gql = """
-        query ($id: String!) {
-          show(_id: $id) {
-            _id
-            name
-            englishName
-            altNames
-            description
-            genres
-            banner
-            availableEpisodesDetail
-          }
-        }
-        """
         variables = {"id": show_id}
-        data = await self._client.query(gql, variables)
+        data = await self._client.query(SHOW_DETAILS_QUERY, variables)
         show = data.get("show") or {}
         episodes_detail = show.get("availableEpisodesDetail") or {}
 
@@ -295,17 +269,10 @@ class AllAnimeSourceAdapter:
     async def get_episode_list(
         self,
         show_id: str,
-        mode: str = "sub",
+        mode: str = MODE_SUB,
     ) -> list[EpisodeSummaryModel]:
-        gql = """
-        query ($id: String!) {
-          show(_id: $id) {
-            availableEpisodesDetail
-          }
-        }
-        """
         variables = {"id": show_id}
-        data = await self._client.query(gql, variables)
+        data = await self._client.query(EPISODE_LIST_QUERY, variables)
         episodes_detail = data.get("show", {}).get("availableEpisodesDetail", {}) or {}
 
         detail = episodes_detail.get(mode, []) or []
@@ -320,7 +287,7 @@ class AllAnimeSourceAdapter:
         self,
         show_id: str,
         episode: str,
-        mode: str = "sub",
+        mode: str = MODE_SUB,
     ) -> list[StreamCandidateModel]:
         """Resolve provider stream candidates for a given episode.
 
@@ -328,20 +295,12 @@ class AllAnimeSourceAdapter:
         but uses Python and Pydantic instead of shell utilities.
         """
 
-        gql = """
-        query ($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) {
-          episode(showId: $showId, translationType: $translationType, episodeString: $episodeString) {
-            episodeString
-            sourceUrls
-          }
-        }
-        """
         variables = {
             "showId": show_id,
             "translationType": mode,
             "episodeString": str(episode),
         }
-        data = await self._client.query(gql, variables)
+        data = await self._client.query(EPISODE_METADATA_QUERY, variables)
         episode_data = data.get("episode") or {}
         source_urls = episode_data.get("sourceUrls") or []
 

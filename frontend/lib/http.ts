@@ -6,7 +6,7 @@ type RequestOptions = {
 };
 
 class ApiClient {
-    private baseURL: string = "/api/v1";
+    private baseURL: string = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
     private getDeviceToken(): string {
         if (typeof window === "undefined") return "";

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/http";
+import { useProfile } from "@/lib/profile-context";
 
 type PreferenceItem = {
     anime_id: string;
@@ -14,9 +15,11 @@ type PreferencesResponse = {
 
 export function usePreferences() {
     const queryClient = useQueryClient();
+    const { profile } = useProfile();
 
     const preferences = useQuery({
         queryKey: ["preferences"],
+        enabled: !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<PreferencesResponse>("/user/preferences");
             return res.data.items;
@@ -40,6 +43,7 @@ export function usePreferences() {
     });
 
     const handleToggleList = (animeId: string) => {
+        if (profile?.is_guest) return;
         const current = getPreferenceForAnime(animeId);
         const nextInList = !current?.in_list;
         toggleList.mutate({ animeId, inList: nextInList });

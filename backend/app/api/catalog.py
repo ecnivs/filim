@@ -79,10 +79,11 @@ def _get_catalog_service(db: AsyncSession = Depends(get_db)) -> CatalogService:
 @router.get("/search")
 async def search_catalog(
     q: str = Query(..., min_length=1),
+    page: int = Query(1, ge=1),
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
 ) -> dict[str, list[AnimeSummaryResponse]]:
-    items = await catalog.search(query=q, mode=mode)
+    items = await catalog.search(query=q, mode=mode, page=page)
     return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
 
 

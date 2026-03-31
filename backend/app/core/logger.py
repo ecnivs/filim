@@ -6,7 +6,7 @@ from app.core.config import settings
 
 def setup_logging():
     """Configure efficient and standard logging for the Filim backend.
-    
+
     Optimized for Raspberry Pi by using standard handlers and rotating files
     to prevent SD card wear. Removed Rich dependency for better performance.
     """
@@ -17,13 +17,11 @@ def setup_logging():
 
     log_file = os.path.join(log_dir, "filim.log")
 
-    # Standard Console Handler (Replaces RichHandler for Pi efficiency)
     console_format = "%(levelname)-8s | %(message)s"
     console_formatter = logging.Formatter(console_format)
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(console_formatter)
 
-    # Rotating File Handler (Protects SD card from filling up)
     file_format = "%(asctime)s | %(levelname)-8s| %(name)s | %(filename)s:%(lineno)d | %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     file_formatter = logging.Formatter(file_format, date_format)
@@ -39,13 +37,11 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(settings.log_level.upper())
 
-    # Clear any existing handlers
     root_logger.handlers = []
 
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
-    # Mute noisy logs for performance
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 

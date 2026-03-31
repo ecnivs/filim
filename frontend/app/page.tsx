@@ -11,6 +11,7 @@ import { ContinueCard } from "@/components/ContinueCard";
 import { useEffect } from "react";
 import { useInView } from "react-intersection-observer";
 import { usePreferences } from "@/hooks/usePreferences";
+import { useProfile } from "@/lib/profile-context";
 
 type ContinueWatchingItem = {
     anime_id: string;
@@ -41,11 +42,13 @@ import { GridView } from "@/components/GridView";
 
 export default function HomePage() {
     const queryClient = useQueryClient();
+    const { profile } = useProfile();
     const searchParams = useSearchParams();
     const urlQuery = searchParams.get("q") || "";
 
     const continueWatching = useQuery({
         queryKey: ["continue-watching"],
+        enabled: !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ items: ContinueWatchingItem[] }>(
                 "/user/continue-watching"
@@ -65,8 +68,6 @@ export default function HomePage() {
             return res.data.sections;
         }
     });
-
-
 
     const discovery = useInfiniteQuery({
         queryKey: ["discovery"],

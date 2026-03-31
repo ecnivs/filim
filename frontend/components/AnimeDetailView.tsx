@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimeCard, type AnimeSummaryCard } from "./AnimeCard";
 import { useState } from "react";
+import { useProfile } from "@/lib/profile-context";
 
 type Episode = {
     number: string;
@@ -43,6 +44,7 @@ interface AnimeDetailViewProps {
 export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
     const queryClient = useQueryClient();
     const router = useRouter();
+    const { profile } = useProfile();
 
     const {
         data,
@@ -58,7 +60,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
 
     const recs = useQuery({
         queryKey: ["anime-recs", id],
-        enabled: !!id,
+        enabled: !!id && !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ sections: RecommendationSection[] }>(
                 "/user/recommendations"
@@ -72,6 +74,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
 
     const preferences = useQuery({
         queryKey: ["preferences"],
+        enabled: !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ items: PreferenceItem[] }>("/user/preferences");
             return res.data.items;
@@ -80,6 +83,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
 
     const continueWatching = useQuery({
         queryKey: ["continue-watching"],
+        enabled: !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ items: { anime_id: string; episode: string }[] }>("/user/continue-watching");
             return res.data.items;
@@ -88,7 +92,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
 
     const animeProgress = useQuery({
         queryKey: ["anime-progress", id],
-        enabled: !!id,
+        enabled: !!id && !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ items: { anime_id: string; episode: string; progress: number }[] }>(`/user/progress/${id}`);
             return res.data.items;
@@ -205,20 +209,22 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                             </svg>
                             {hasProgress ? "Resume" : "Play"}
                         </Link>
-                        <button
-                            onClick={() => handleToggleList(data.id)}
-                            className="flex h-9 w-9 md:h-11 md:w-11 items-center justify-center rounded-full border-2 border-neutral-400 text-white hover:border-white transition-colors bg-black/40"
-                        >
-                            {getPreferenceForAnime(data.id)?.in_list ? (
-                                <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="currentColor">
-                                    <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
-                                </svg>
-                            ) : (
-                                <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="currentColor">
-                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-                                </svg>
-                            )}
-                        </button>
+                        {!profile?.is_guest && (
+                            <button
+                                onClick={() => handleToggleList(data.id)}
+                                className="flex h-9 w-9 md:h-11 md:w-11 items-center justify-center rounded-full border-2 border-neutral-400 text-white hover:border-white transition-colors bg-black/40"
+                            >
+                                {getPreferenceForAnime(data.id)?.in_list ? (
+                                    <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="currentColor">
+                                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+                                    </svg>
+                                ) : (
+                                    <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="currentColor">
+                                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                                    </svg>
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
             </section>

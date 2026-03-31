@@ -12,6 +12,7 @@ class ProfileModel(BaseModel):
     id: str
     name: str
     is_locked: bool
+    is_guest: bool
     created_at: datetime
 
     class Config:
@@ -41,6 +42,7 @@ class ProfileService:
 
     async def create_profile(self, name: str, pin: str | None = None) -> ProfileModel:
         from uuid import uuid4
+
         profile_id = str(uuid4())
         now = datetime.now(timezone.utc)
         pin_hash = _hash_pin(pin, profile_id) if pin else None
@@ -86,6 +88,8 @@ class ProfileService:
         profile = await self.db.get(Profile, profile_id)
         if profile is None:
             return
+        if profile.is_guest:
+            raise ValueError("Guest profile cannot be deleted")
         await self.db.delete(profile)
         await self.db.commit()
 
