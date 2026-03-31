@@ -55,6 +55,7 @@ class CatalogService:
                 genres=summary.tags or None,
                 episode_count=summary.episode_count or None,
                 poster_url=summary.poster_image_url,
+                cover_image_url=summary.banner_image_url,
             )
             self.db.add(anime)
         else:
@@ -72,6 +73,8 @@ class CatalogService:
                 anime.episode_count = summary.episode_count
             if summary.poster_image_url:
                 anime.poster_url = summary.poster_image_url
+            if summary.banner_image_url:
+                anime.cover_image_url = summary.banner_image_url
 
         try:
             await self.db.commit()
@@ -136,7 +139,9 @@ class CatalogService:
 
         return episodes
 
-    async def get_trending(self, limit: int = 20, page: int = 1) -> list[AnimeSummaryModel]:
+    async def get_trending(
+        self, limit: int = 20, page: int = 1
+    ) -> list[AnimeSummaryModel]:
         """Return trending shows based on AnimeStats and source metadata."""
 
         try:
@@ -166,18 +171,23 @@ class CatalogService:
                         synopsis=anime.synopsis,
                         tags=anime.genres or [],
                         poster_image_url=anime.poster_url,
+                        banner_image_url=anime.cover_image_url,
                     )
                 )
             return results
 
         return await self.source.get_popular_shows(limit=limit, page=page)
 
-    async def get_shows(self, limit: int = 40, page: int = 1, mode: str = "sub") -> list[AnimeSummaryModel]:
+    async def get_shows(
+        self, limit: int = 40, page: int = 1, mode: str = "sub"
+    ) -> list[AnimeSummaryModel]:
         """Return popular TV shows (more than 1 episode)."""
         popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
         return [s for s in popular if (s.episode_count or 0) > 1]
 
-    async def get_movies(self, limit: int = 40, page: int = 1, mode: str = "sub") -> list[AnimeSummaryModel]:
+    async def get_movies(
+        self, limit: int = 40, page: int = 1, mode: str = "sub"
+    ) -> list[AnimeSummaryModel]:
         """Return popular Movies (exactly 1 episode)."""
         popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
         return [s for s in popular if (s.episode_count or 0) == 1]

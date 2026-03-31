@@ -78,7 +78,6 @@ export default function HomePage() {
             return res.data.sections;
         },
         getNextPageParam: (lastPage, allPages) => {
-            // Only stop if we've reached a very high page count or the backend returns truly nothing after our robust filling.
             if (allPages.length >= 50) return undefined;
             if (lastPage && lastPage.length === 0 && allPages.length > 5) return undefined;
             return allPages.length + 1;
@@ -119,7 +118,10 @@ export default function HomePage() {
         const candidates = [
             ...(recommendations.data?.flatMap((s) => s.items) || [])
         ];
-        return candidates.find((a) => a.poster_image_url && a.poster_image_url.startsWith("http"));
+        const withBanners = candidates.filter((a) => a.banner_image_url && a.banner_image_url.startsWith("http"));
+        const withPosters = candidates.filter((a) => a.poster_image_url && a.poster_image_url.startsWith("http"));
+
+        return withBanners[0] || withPosters[0];
     })();
 
     const billboardResumeHref = (() => {
@@ -146,9 +148,9 @@ export default function HomePage() {
                     {featuredAnime && (
                         <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[400px] md:min-h-[500px]">
                             <div className="absolute inset-0">
-                                {featuredAnime.poster_image_url && (
+                                {featuredAnime.banner_image_url || featuredAnime.poster_image_url ? (
                                     <Image
-                                        src={featuredAnime.poster_image_url}
+                                        src={featuredAnime.banner_image_url || (featuredAnime.poster_image_url as string)}
                                         alt={featuredAnime.title}
                                         fill
                                         priority
@@ -156,7 +158,7 @@ export default function HomePage() {
                                         className="object-cover"
                                         unoptimized
                                     />
-                                )}
+                                ) : null}
                                 <div className="absolute inset-0 bg-gradient-to-r from-background via-background/60 to-transparent" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
                                 <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />

@@ -44,9 +44,9 @@ export default {
                         filter: "blur(0px) brightness(1.2)"
                     },
                     "100%": {
-                        transform: "scale(2) translate3d(0,0,0)",
-                        opacity: "0",
-                        filter: "blur(15px) brightness(2)"
+                        transform: "scale(1.1) translate3d(0,0,0)",
+                        opacity: "1",
+                        filter: "blur(0px) brightness(1.2)"
                     }
                 }
             }

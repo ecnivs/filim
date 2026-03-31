@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy import event
 from app.core.config import settings
+import logging
 
 
 connect_args = (
@@ -19,6 +20,8 @@ engine: AsyncEngine = create_async_engine(
     future=True,
     connect_args=connect_args,
 )
+
+logging.info(f"Database initialized at: {settings.database_url}")
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

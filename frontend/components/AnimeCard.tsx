@@ -13,6 +13,7 @@ export type AnimeSummaryCard = {
     english_title?: string | null;
     episode_count?: number;
     poster_image_url?: string | null;
+    banner_image_url?: string | null;
     synopsis?: string | null;
     tags?: string[];
     available_audio_languages?: string[];

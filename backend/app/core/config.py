@@ -1,3 +1,5 @@
+from __future__ import annotations
+import os
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,7 +17,16 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
-    database_url: str = "sqlite+aiosqlite:///./filim.db"
+    @property
+    def project_root(self) -> str:
+        return os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+
+    @property
+    def database_url(self) -> str:
+        db_path = os.path.join(self.project_root, "filim.db")
+        return f"sqlite+aiosqlite:///{db_path}"
 
     allanime_api_url: str = "https://api.allanime.day/api"
     allanime_referer: str = "https://allmanga.to"

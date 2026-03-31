@@ -102,12 +102,18 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
             >
                 <div className="flex h-12 md:h-16 items-center justify-between px-[4%]">
                     <div className="flex items-center gap-4 md:gap-6">
-                        <Link
-                            href="/"
-                            className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none"
-                        >
-                            Filim
-                        </Link>
+                        {pathname === "/profiles" ? (
+                            <div className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none">
+                                Filim
+                            </div>
+                        ) : (
+                            <Link
+                                href="/"
+                                className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none"
+                            >
+                                Filim
+                            </Link>
+                        )}
                         {pathname !== "/profiles" && (
                             <nav className="hidden md:flex items-center gap-6 text-sm">
                                 {NAV_ITEMS.map((item) => {

@@ -1,5 +1,4 @@
 from __future__ import annotations
-import asyncio
 from collections import Counter
 from typing import List
 from pydantic import BaseModel
@@ -16,6 +15,7 @@ class AnimeSummaryModel(BaseModel):
     synopsis: str | None = None
     tags: list[str] = []
     poster_image_url: str | None = None
+    banner_image_url: str | None = None
 
     @staticmethod
     def from_source(src) -> "AnimeSummaryModel":
@@ -27,6 +27,7 @@ class AnimeSummaryModel(BaseModel):
             synopsis=src.synopsis,
             tags=src.tags,
             poster_image_url=src.poster_image_url,
+            banner_image_url=src.banner_image_url,
         )
 
 
@@ -50,6 +51,7 @@ class RecommendationService:
                 synopsis=row.synopsis,
                 tags=row.genres or [],
                 poster_image_url=row.poster_url,
+                banner_image_url=row.cover_image_url,
             )
             for row in rows
         ]
@@ -114,6 +116,7 @@ class RecommendationService:
                         synopsis=row.synopsis,
                         tags=row.genres or [],
                         poster_image_url=row.poster_url,
+                        banner_image_url=row.cover_image_url,
                     )
                 )
             else:
@@ -216,7 +219,7 @@ class RecommendationService:
         self, page: int = 1, limit: int = 3, profile_id: str | None = None
     ) -> List[RecommendationSectionModel]:
         """Fetch discovery sections (genres) for infinite scrolling.
-        
+
         Tries to skip empty/failed genres to ensure each 'page' has content.
         """
         exclude_genres = []
@@ -237,24 +240,21 @@ class RecommendationService:
             pass
 
         genres = await self._get_dynamic_genres(exclude=exclude_genres)
-        
-        # Robust discovery: iterate through genres until we fill 'limit' sections or run out of genres.
+
         sections: list[RecommendationSectionModel] = []
         seen_ids: set[str] = set()
-        
-        # We use a window of genres to try to find content.
-        batch_size = limit * 5 # Try up to 5x the limit to find valid sections
+
+        batch_size = limit * 5
         start_idx = (page - 1) * limit
         genre_pool = genres[start_idx : start_idx + batch_size]
-        
+
         if not genre_pool:
             return []
 
-        # Process in chunks to find populated sections
         for genre in genre_pool:
             if len(sections) >= limit:
                 break
-                
+
             try:
                 results = await self.catalog.search(query=genre, page=1)
                 if not results:
@@ -269,7 +269,9 @@ class RecommendationService:
                 ]
 
                 if filtered:
-                    section_items = [AnimeSummaryModel.from_source(r) for r in filtered[:20]]
+                    section_items = [
+                        AnimeSummaryModel.from_source(r) for r in filtered[:20]
+                    ]
                     for item in section_items:
                         seen_ids.add(item.id)
 

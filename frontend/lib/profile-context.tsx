@@ -51,7 +51,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
                     }
                 }
             } catch (err) {
-                console.error("Profile validation failed", err);
+                console.error("Profile initialization failed. If you switched tunnel URLs, your active profile selection may have been reset by the browser.", err);
             } finally {
                 setIsReady(true);
             }

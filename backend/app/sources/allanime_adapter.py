@@ -18,6 +18,7 @@ class AnimeSummaryModel(BaseModel):
     synopsis: Optional[str] = None
     tags: list[str] = []
     poster_image_url: Optional[str] = None
+    banner_image_url: Optional[str] = None
     type: Optional[str] = None
 
     available_audio_languages: list[str] = []
@@ -111,7 +112,7 @@ class AllAnimeSourceAdapter:
             "$countryOrigin: VaildCountryOriginEnumType ) { "
             "shows( search: $search limit: $limit page: $page "
             "translationType: $translationType countryOrigin: $countryOrigin ) { "
-            "edges { _id name englishName altNames description genres thumbnail "
+            "edges { _id name englishName altNames description genres thumbnail banner "
             "type availableEpisodesDetail __typename } } }"
         )
         variables = {
@@ -153,6 +154,7 @@ class AllAnimeSourceAdapter:
                     synopsis=strip_html(edge.get("description")) or None,
                     tags=list(edge.get("genres") or []),
                     poster_image_url=thumb,
+                    banner_image_url=edge.get("banner"),
                     available_audio_languages=languages,
                     alt_names=list(edge.get("altNames") or []),
                     type=edge.get("type"),
@@ -180,7 +182,7 @@ class AllAnimeSourceAdapter:
             "$countryOrigin: VaildCountryOriginEnumType ) { "
             "shows( search: $search limit: $limit page: $page "
             "translationType: $translationType countryOrigin: $countryOrigin ) { "
-            "edges { _id name englishName altNames description genres thumbnail "
+            "edges { _id name englishName altNames description genres thumbnail banner "
             "type availableEpisodesDetail __typename } } }"
         )
         variables = {
@@ -222,6 +224,7 @@ class AllAnimeSourceAdapter:
                     synopsis=strip_html(edge.get("description")) or None,
                     tags=list(edge.get("genres") or []),
                     poster_image_url=thumb,
+                    banner_image_url=edge.get("banner"),
                     available_audio_languages=languages,
                     alt_names=list(edge.get("altNames") or []),
                     type=edge.get("type"),
@@ -244,10 +247,7 @@ class AllAnimeSourceAdapter:
             altNames
             description
             genres
-            thumbnail
-            status
-            type
-            relatedShows
+            banner
             availableEpisodesDetail
           }
         }
@@ -284,6 +284,7 @@ class AllAnimeSourceAdapter:
             synopsis=strip_html(show.get("description")) or None,
             tags=list(show.get("genres") or []),
             poster_image_url=thumb,
+            banner_image_url=show.get("banner"),
             available_audio_languages=languages,
             related_shows=list(show.get("relatedShows") or []),
             alt_names=list(show.get("altNames") or []),

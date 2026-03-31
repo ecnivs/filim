@@ -65,6 +65,7 @@ class ApiClient {
         });
 
         if (!response.ok) {
+            console.error(`API Error [${method} ${fullURL}]:`, response.status, response.statusText);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 

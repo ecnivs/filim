@@ -12,16 +12,28 @@ export function SplashLoader({
     const [isVisible, setIsVisible] = useState(true);
     const [shouldRender, setShouldRender] = useState(true);
     const [minTimePassed, setMinTimePassed] = useState(false);
+    const [stableLoading, setStableLoading] = useState(true);
+
+    useEffect(() => {
+        if (isLoading) {
+            setStableLoading(true);
+        } else {
+            const timer = setTimeout(() => {
+                setStableLoading(false);
+            }, 800);
+            return () => clearTimeout(timer);
+        }
+    }, [isLoading]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
             setMinTimePassed(true);
-        }, 1500);
+        }, 1200);
         return () => clearTimeout(timer);
     }, []);
 
     useEffect(() => {
-        if (!isLoading && minTimePassed) {
+        if (!stableLoading && minTimePassed) {
             setIsVisible(false);
 
             const doneTimer = setTimeout(() => {
@@ -31,7 +43,7 @@ export function SplashLoader({
 
             return () => clearTimeout(doneTimer);
         }
-    }, [isLoading, minTimePassed, onComplete]);
+    }, [stableLoading, minTimePassed, onComplete]);
 
     if (!shouldRender) return null;
 
