@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimeCard, type AnimeSummaryCard as AnimeSummary } from "./AnimeCard";
+import { ShowCard, type ShowSummaryCard as ShowSummary } from "./ShowCard";
 import { UseInfiniteQueryResult } from "@tanstack/react-query";
 import { useInView } from "react-intersection-observer";
 import { useEffect } from "react";
@@ -39,7 +39,7 @@ export function GridView({
         }
     }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-    const allItems: AnimeSummary[] = data?.pages?.flatMap((page: any) => {
+    const allItems: ShowSummary[] = data?.pages?.flatMap((page: any) => {
         if (Array.isArray(page)) return page;
         if (page && typeof page === 'object' && 'items' in page) return page.items;
         return [];
@@ -66,12 +66,12 @@ export function GridView({
             ) : allItems.length > 0 ? (
                 <>
                     <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-6 md:gap-4">
-                        {allItems.map((anime: AnimeSummary) => (
-                            <AnimeCard
-                                key={anime.id}
-                                anime={anime}
-                                isInList={isInList(anime.id)}
-                                onToggleList={() => handleToggleList(anime.id)}
+                        {allItems.map((row: ShowSummary) => (
+                            <ShowCard
+                                key={row.id}
+                                show={row}
+                                isInList={isInList(row.id)}
+                                onToggleList={() => handleToggleList(row.id)}
                                 widthClassName="w-full"
                             />
                         ))}

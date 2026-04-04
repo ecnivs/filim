@@ -13,7 +13,7 @@ type EpisodeSummary = {
     duration_seconds?: number | null;
 };
 
-type AnimeDetails = {
+type WatchShowDetails = {
     id: string;
     title: string;
     episode_count: number;
@@ -25,30 +25,30 @@ type AnimeDetails = {
 };
 
 function WatchLayoutInner({ children }: { children: React.ReactNode }) {
-    const params = useParams<{ animeId: string; episode: string }>();
+    const params = useParams<{ showId: string; episode: string }>();
     const router = useRouter();
     const { state, setEpisodeData } = useWatch();
     const prevRouteKeyRef = useRef<string | null>(null);
-    
+
     const [language, setLanguage] = useState<string>("ja");
     const languageRef = useRef(language);
     languageRef.current = language;
     const [selectedQualityId, setSelectedQualityId] = useState<string | null>(null);
-    const [animeDetails, setAnimeDetails] = useState<AnimeDetails | null>(null);
+    const [showDetails, setShowDetails] = useState<WatchShowDetails | null>(null);
     const [seasons, setSeasons] = useState<{ id: string; title: string }[]>([]);
 
     const routeIds = useMemo(() => {
-        const { animeId, episode } = params;
-        if (animeId && animeId !== "undefined" && episode && episode !== "undefined") {
+        const { showId, episode } = params;
+        if (showId && showId !== "undefined" && episode && episode !== "undefined") {
             return {
-                animeId: decodeURIComponent(animeId),
+                showId: decodeURIComponent(showId),
                 episode: decodeURIComponent(episode)
             };
         }
         return null;
-    }, [params.animeId, params.episode]);
+    }, [params.showId, params.episode]);
 
-    const routeKey = routeIds ? `${routeIds.animeId}/${routeIds.episode}` : null;
+    const routeKey = routeIds ? `${routeIds.showId}/${routeIds.episode}` : null;
 
     const qualityHint = useMemo(() => {
         if (selectedQualityId == null) return undefined;
@@ -56,8 +56,6 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         return v?.resolution ?? undefined;
     }, [selectedQualityId, state.variants]);
 
-    // Refetch stream on episode, audio language, or API-driven quality change. Multi-level HLS uses
-    // in-player levels when available; otherwise variants + quality param.
     useEffect(() => {
         if (!routeIds || !routeKey) return;
 
@@ -83,10 +81,10 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                 error: null,
                 ...(isEpisodeChange
                     ? {
-                          manifestUrl: null,
-                          variants: [],
-                          audioLanguages: undefined
-                      }
+                        manifestUrl: null,
+                        variants: [],
+                        audioLanguages: undefined
+                    }
                     : {})
             });
 
@@ -96,7 +94,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                     try {
                         const progressRes = await api.get<{
                             items: { episode: string; position_seconds: number; duration_seconds: number }[];
-                        }>(`/user/progress/${ids.animeId}`);
+                        }>(`/user/progress/${ids.showId}`);
                         const match = progressRes.data.items.find((i) =>
                             episodesMatchForProgress(i.episode, ids.episode)
                         );
@@ -112,7 +110,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                 if (applyServerResume) {
                     try {
                         const prefRes = await api.get<{ item: { audio_language_id: string } | null }>(
-                            "/audio-preference"
+                            "/user/audio-preference"
                         );
                         const pref = prefRes.data.item?.audio_language_id;
                         if (pref === "ja" || pref === "en") streamLanguage = pref;
@@ -132,7 +130,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                     manifest_url: string;
                     variants: { id: string; resolution?: string | null; provider?: string | null; kind: string }[];
                     audio_languages?: { id: string; code?: string | null; label: string; is_default?: boolean }[];
-                }>(`/anime/${ids.animeId}/episodes/${ids.episode}/stream`, {
+                }>(`/stream/${ids.showId}/episodes/${ids.episode}/stream`, {
                     params: {
                         language: streamLanguage,
                         ...(qualityParam ? { quality: qualityParam } : {}),
@@ -168,26 +166,24 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         };
     }, [routeKey, routeIds, language, qualityHint, selectedQualityId, setEpisodeData]);
 
-    // Fetch Anime Details (Once per animeId)
     useEffect(() => {
         let cancelled = false;
         async function fetchDetails() {
-            if (!routeIds?.animeId) return;
+            if (!routeIds?.showId) return;
             try {
-                const res = await api.get<AnimeDetails>(`/catalog/${routeIds.animeId}`);
+                const res = await api.get<WatchShowDetails>(`/catalog/${routeIds.showId}`);
                 if (cancelled) return;
-                
+
                 const sortedEpisodes = (res.data.episodes || []).sort((a, b) => {
                     const aNum = parseFloat(String(a.number).replace(/[^0-9.]/g, ""));
                     const bNum = parseFloat(String(b.number).replace(/[^0-9.]/g, ""));
                     return aNum - bNum;
                 });
-                setAnimeDetails({ ...res.data, episodes: sortedEpisodes });
+                setShowDetails({ ...res.data, episodes: sortedEpisodes });
 
-                // Fetch series/seasons
                 try {
                     const seriesRes = await api.get<{ items: { id: string; title: string }[] }>(
-                        `/catalog/${routeIds.animeId}/series`
+                        `/catalog/${routeIds.showId}/series`
                     );
                     if (cancelled) return;
                     setSeasons(prev => {
@@ -199,19 +195,18 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                     });
                 } catch { /* ignore */ }
             } catch (err) {
-                console.warn("Failed to load anime details", err);
+                console.warn("Failed to load show details", err);
             }
         }
         void fetchDetails();
         return () => { cancelled = true; };
-    }, [routeIds?.animeId]);
+    }, [routeIds?.showId]);
 
-    // Audio Preference
     useEffect(() => {
         async function fetchAudioPreference() {
             try {
                 const res = await api.get<{ item: { audio_language_id: string } | null }>(
-                    "/audio-preference"
+                    "/user/audio-preference"
                 );
                 const pref = res.data.item?.audio_language_id;
                 if (!pref) return;
@@ -224,40 +219,40 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     }, []);
 
     const episodeMeta = useMemo(() => {
-        if (!animeDetails || !routeIds) return null;
-        return animeDetails.episodes.find((ep) => {
+        if (!showDetails || !routeIds) return null;
+        return showDetails.episodes.find((ep) => {
             const epNum = String(ep.number).toLowerCase().replace(/^e/, '');
             const routeNum = String(routeIds.episode).toLowerCase().replace(/^e/, '');
             return epNum === routeNum || epNum.padStart(2, '0') === routeNum.padStart(2, '0');
         }) ?? null;
-    }, [animeDetails, routeIds]);
+    }, [showDetails, routeIds]);
 
     const episodeLabel = episodeMeta
         ? `E${episodeMeta.number}${episodeMeta.title ? ` • ${episodeMeta.title}` : ""}`
         : `E${routeIds?.episode ?? "?"}`;
 
     const nextEpisode = useMemo(() => {
-        if (!animeDetails || !episodeMeta) return null;
-        const index = animeDetails.episodes.findIndex((ep) => ep.number === episodeMeta.number);
-        return animeDetails.episodes[index + 1] ?? null;
-    }, [animeDetails, episodeMeta]);
+        if (!showDetails || !episodeMeta) return null;
+        const index = showDetails.episodes.findIndex((ep) => ep.number === episodeMeta.number);
+        return showDetails.episodes[index + 1] ?? null;
+    }, [showDetails, episodeMeta]);
 
-    const nextEpisodeHref = nextEpisode ? `/watch/${animeDetails?.id}/${nextEpisode.number}` : undefined;
+    const nextEpisodeHref = nextEpisode ? `/watch/${showDetails?.id}/${nextEpisode.number}` : undefined;
     const nextEpisodeLabel = nextEpisode ? `Episode ${nextEpisode.number}${nextEpisode.title ? ` • ${nextEpisode.title}` : ""}` : undefined;
 
     const languageOptions = useMemo(() => {
-        if (animeDetails?.available_audio_languages?.length) {
-            return animeDetails.available_audio_languages.map(code => ({
+        if (showDetails?.available_audio_languages?.length) {
+            return showDetails.available_audio_languages.map(code => ({
                 id: code,
                 label: code === "en" ? "English" : "Japanese (日本語)"
             }));
         }
         return [{ id: "ja", label: "Japanese (日本語)" }, { id: "en", label: "English" }];
-    }, [animeDetails]);
+    }, [showDetails]);
 
     const handleChangeLanguage = useCallback((nextId: string) => {
         setLanguage(nextId);
-        api.post("/audio-preference", { audio_language_id: nextId }).catch(() => {});
+        api.post("/user/audio-preference", { audio_language_id: nextId }).catch(() => { });
     }, []);
 
     const stableQualityOptions = useMemo(
@@ -275,12 +270,12 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     const handleProgress = useCallback((payload: any) => {
         if (!routeIds) return;
         api.post("/user/progress", {
-            anime_id: routeIds.animeId,
+            show_id: routeIds.showId,
             episode: routeIds.episode,
             position_seconds: payload.positionSeconds,
             duration_seconds: payload.durationSeconds,
             is_finished: payload.isFinished
-        }).catch(() => {});
+        }).catch(() => { });
     }, [routeIds]);
 
     const handleBack = useCallback(() => router.back(), [router]);
@@ -292,11 +287,11 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                     <Player
                         source={state.manifestUrl ? { url: state.manifestUrl } : undefined}
                         isStreamLoading={state.isPageLoading}
-                        title={animeDetails?.title}
+                        title={showDetails?.title}
                         episodeLabel={episodeLabel}
                         onBack={handleBack}
-                        audioLanguages={state.audioLanguages?.map(l => ({ 
-                            id: l.id, label: l.label, code: l.code ?? null, isDefault: l.is_default ?? false 
+                        audioLanguages={state.audioLanguages?.map(l => ({
+                            id: l.id, label: l.label, code: l.code ?? null, isDefault: l.is_default ?? false
                         }))}
                         languageOptions={languageOptions}
                         currentLanguageId={language}
@@ -309,10 +304,10 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                         qualityOptions={stableQualityOptions}
                         currentQualityId={selectedQualityId ?? "auto"}
                         onChangeQuality={setSelectedQualityId}
-                        animeId={animeDetails?.id || routeIds?.animeId}
-                        episodes={animeDetails?.episodes || []}
+                        showId={showDetails?.id || routeIds?.showId}
+                        episodes={showDetails?.episodes || []}
                         seasons={seasons}
-                        isMovie={animeDetails?.episode_count === 1}
+                        isMovie={showDetails?.episode_count === 1}
                     />
                 )}
 
@@ -325,8 +320,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                     </div>
                 )}
             </div>
-            
-            {/* Hidden layer for children (page) to process its side-effects */}
+
             <div className="hidden">{children}</div>
         </main>
     );

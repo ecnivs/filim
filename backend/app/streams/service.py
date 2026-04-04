@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional
 from pydantic import BaseModel
 from app.core.cache import cache_response
-from app.sources import AllAnimeSourceAdapter, StreamCandidateModel
+from app.sources import AllanimeCatalogAdapter, StreamCandidateModel
 from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverError
 
 
@@ -15,14 +15,14 @@ class StreamVariantModel(BaseModel):
 
 
 class StreamService:
-    def __init__(self, source: AllAnimeSourceAdapter | None = None) -> None:
-        self.source = source or AllAnimeSourceAdapter()
+    def __init__(self, source: AllanimeCatalogAdapter | None = None) -> None:
+        self.source = source or AllanimeCatalogAdapter()
         self.resolver = StreamResolver()
 
     @cache_response(ttl_seconds=1800)
     async def get_hls_manifest_for_episode(
         self,
-        anime_id: str,
+        show_id: str,
         episode: str,
         mode: str,
         preferred_quality: Optional[str],
@@ -30,7 +30,7 @@ class StreamService:
         variant_id: Optional[str] = None,
     ) -> tuple[str, list[StreamVariantModel]]:
         candidates = await self.source.get_stream_candidates(
-            show_id=anime_id,
+            show_id=show_id,
             episode=episode,
             mode=mode,
         )

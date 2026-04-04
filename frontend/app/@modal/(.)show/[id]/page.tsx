@@ -1,20 +1,19 @@
 "use client";
 
 import { Modal } from "@/components/Modal";
-import { AnimeDetailView } from "@/components/AnimeDetailView";
+import { ShowDetailView } from "@/components/ShowDetailView";
 import { useRouter, usePathname } from "next/navigation";
 
-export default function AnimeDetailModal({ params }: { params: { id: string } }) {
+export default function ShowDetailModal({ params }: { params: { id: string } }) {
     const router = useRouter();
     const pathname = usePathname();
 
-
-    const isVisible = pathname === `/anime/${params.id}`;
+    const isVisible = pathname === `/show/${params.id}`;
 
     return (
         <Modal isOpen={isVisible} onClose={() => router.back()}>
             <div className="max-h-[90vh] overflow-y-auto scrollbar-none rounded-xl">
-                <AnimeDetailView id={params.id} />
+                <ShowDetailView id={params.id} />
             </div>
         </Modal>
     );

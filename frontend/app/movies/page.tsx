@@ -3,13 +3,13 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 import { GridView } from "@/components/GridView";
-import type { AnimeSummaryCard as AnimeSummary } from "@/components/AnimeCard";
+import type { ShowSummaryCard as ShowSummary } from "@/components/ShowCard";
 
 export default function MoviesPage() {
     const infiniteQuery = useInfiniteQuery({
         queryKey: ["movies"],
         queryFn: async ({ pageParam = 1 }) => {
-            const res = await api.get<{ items: AnimeSummary[] }>("/catalog/movies", {
+            const res = await api.get<{ items: ShowSummary[] }>("/catalog/movies", {
                 params: { page: pageParam }
             });
             return res.data;

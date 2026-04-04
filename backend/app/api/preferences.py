@@ -10,27 +10,27 @@ from app.preferences import (
     PreferenceModel,
     PreferencesService,
 )
-from app.api.catalog import _get_catalog_service, AnimeSummaryResponse
+from app.api.catalog import _get_catalog_service, ShowSummaryResponse
 from app.catalog import CatalogService
 
 
 class PreferenceItem(BaseModel):
-    anime_id: str
+    show_id: str
     in_list: bool
     rating: Optional[Literal["like", "dislike"]] = None
 
     @classmethod
     def from_model(cls, model: PreferenceModel) -> "PreferenceItem":
-        return cls(anime_id=model.anime_id, in_list=model.in_list, rating=model.rating)
+        return cls(show_id=model.show_id, in_list=model.in_list, rating=model.rating)
 
 
 class UpdateListBody(BaseModel):
-    anime_id: str
+    show_id: str
     in_list: bool
 
 
 class UpdateRatingBody(BaseModel):
-    anime_id: str
+    show_id: str
     rating: Optional[Literal["like", "dislike"]] = None
 
 
@@ -69,21 +69,19 @@ async def get_watchlist(
     x_profile_id: str | None = Header(None, alias="X-Profile-Id"),
     service: PreferencesService = Depends(_get_preferences_service),
     catalog: CatalogService = Depends(_get_catalog_service),
-) -> dict[str, list[AnimeSummaryResponse]]:
+) -> dict[str, list[ShowSummaryResponse]]:
     if not x_profile_id:
         return {"items": []}
 
-    anime_ids = await service.get_list_anime_ids(profile_id=x_profile_id)
-    if not anime_ids:
+    show_ids = await service.get_list_show_ids(profile_id=x_profile_id)
+    if not show_ids:
         return {"items": []}
 
-    # Resolve IDs to full anime objects.
-    # Note: This might be slow for large lists, but functional for now.
     results = []
-    for aid in anime_ids:
+    for sid in show_ids:
         try:
-            details = await catalog.get_show_details(anime_id=aid)
-            results.append(AnimeSummaryResponse.from_source(details))
+            details = await catalog.get_show_details(show_id=sid)
+            results.append(ShowSummaryResponse.from_source(details))
         except Exception:
             continue
 
@@ -100,7 +98,7 @@ async def update_list_membership(
         raise HTTPException(status_code=400, detail="Profile header required")
     item = await service.set_in_list(
         profile_id=x_profile_id,
-        anime_id=body.anime_id,
+        show_id=body.show_id,
         in_list=body.in_list,
     )
     return {"ok": True, "item": PreferenceItem.from_model(item)}
@@ -116,7 +114,7 @@ async def update_rating(
         raise HTTPException(status_code=400, detail="Profile header required")
     item = await service.set_rating(
         profile_id=x_profile_id,
-        anime_id=body.anime_id,
+        show_id=body.show_id,
         rating=body.rating,
     )
     return {"ok": True, "item": PreferenceItem.from_model(item)}

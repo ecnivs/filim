@@ -4,37 +4,15 @@ from typing import List
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Anime, AnimeStats, ProfileListEntry
+from app.models import ProfileListEntry, Show, ShowStats
 from app.catalog.service import CatalogService
-
-
-class AnimeSummaryModel(BaseModel):
-    id: str
-    title: str
-    episode_count: int
-    synopsis: str | None = None
-    tags: list[str] = []
-    poster_image_url: str | None = None
-    banner_image_url: str | None = None
-
-    @staticmethod
-    def from_source(src) -> "AnimeSummaryModel":
-        """Convert a source adapter AnimeSummaryModel to the local one."""
-        return AnimeSummaryModel(
-            id=src.id or "",
-            title=src.title,
-            episode_count=src.episode_count,
-            synopsis=src.synopsis,
-            tags=src.tags,
-            poster_image_url=src.poster_image_url,
-            banner_image_url=src.banner_image_url,
-        )
+from app.sources import ShowSummaryModel
 
 
 class RecommendationSectionModel(BaseModel):
     id: str
     title: str
-    items: list[AnimeSummaryModel]
+    items: list[ShowSummaryModel]
 
 
 class RecommendationService:
@@ -42,9 +20,9 @@ class RecommendationService:
         self.db = db
         self.catalog = CatalogService(db=db)
 
-    async def _anime_from_rows(self, rows: list[Anime]) -> list[AnimeSummaryModel]:
+    async def _shows_from_rows(self, rows: list[Show]) -> list[ShowSummaryModel]:
         return [
-            AnimeSummaryModel(
+            ShowSummaryModel(
                 id=row.source_id,
                 title=row.title,
                 episode_count=row.episode_count or 0,
@@ -58,9 +36,9 @@ class RecommendationService:
 
     async def get_trending_section(self) -> RecommendationSectionModel:
         stmt = (
-            select(Anime)
-            .join(AnimeStats, AnimeStats.anime_id == Anime.id)
-            .order_by(AnimeStats.is_trending.desc(), AnimeStats.device_count_30d.desc())
+            select(Show)
+            .join(ShowStats, ShowStats.show_id == Show.id)
+            .order_by(ShowStats.is_trending.desc(), ShowStats.device_count_30d.desc())
             .limit(30)
         )
         try:
@@ -68,11 +46,11 @@ class RecommendationService:
         except Exception:
             rows = []
 
-        items = await self._anime_from_rows(rows)
+        items = await self._shows_from_rows(rows)
         if len(items) < 10:
             popular = await self.catalog.source.get_popular_shows(limit=30)
             items = items + [
-                AnimeSummaryModel.from_source(p)
+                p
                 for p in popular
                 if not any(existing.id == p.id for existing in items)
             ]
@@ -84,7 +62,6 @@ class RecommendationService:
     async def get_my_list_section(
         self, profile_id: str
     ) -> RecommendationSectionModel | None:
-        """Build a 'My List' section from the user's saved list entries."""
         stmt = select(ProfileListEntry).where(ProfileListEntry.profile_id == profile_id)
         try:
             entries = (await self.db.execute(stmt)).scalars().all()
@@ -94,9 +71,9 @@ class RecommendationService:
         if not entries:
             return None
 
-        anime_ids = [e.anime_id for e in entries]
+        show_ids = [e.show_id for e in entries]
 
-        stmt = select(Anime).where(Anime.source_id.in_(anime_ids))
+        stmt = select(Show).where(Show.source_id.in_(show_ids))
         try:
             db_rows = (await self.db.execute(stmt)).scalars().all()
         except Exception:
@@ -104,12 +81,12 @@ class RecommendationService:
 
         db_map = {row.source_id: row for row in db_rows}
 
-        items: list[AnimeSummaryModel] = []
-        for aid in anime_ids:
-            if aid in db_map:
-                row = db_map[aid]
+        items: list[ShowSummaryModel] = []
+        for sid in show_ids:
+            if sid in db_map:
+                row = db_map[sid]
                 items.append(
-                    AnimeSummaryModel(
+                    ShowSummaryModel(
                         id=row.source_id,
                         title=row.title,
                         episode_count=row.episode_count or 0,
@@ -121,8 +98,8 @@ class RecommendationService:
                 )
             else:
                 try:
-                    details = await self.catalog.get_show_details(anime_id=aid)
-                    items.append(AnimeSummaryModel.from_source(details))
+                    details = await self.catalog.get_show_details(show_id=sid)
+                    items.append(details)
                 except Exception:
                     continue
 
@@ -134,15 +111,10 @@ class RecommendationService:
     async def get_for_you_section(
         self, profile_id: str | None = None
     ) -> RecommendationSectionModel:
-        """Build a personalized 'For You' section based on library genres.
-
-        Falls back to a distinct offset of popular shows so it never
-        duplicates the Trending row.
-        """
         genre_counts: Counter[str] = Counter()
 
         try:
-            stmt = select(Anime.genres)
+            stmt = select(Show.genres)
             result = await self.db.execute(stmt)
             for row in result.scalars().all():
                 if row:
@@ -152,14 +124,13 @@ class RecommendationService:
 
         if genre_counts:
             top_genre = genre_counts.most_common(1)[0][0]
-            # Use native genre filtering for better accuracy and performance
             filtered = await self.catalog.search(query="", genres=[top_genre], page=1)
 
             if len(filtered) >= 5:
                 return RecommendationSectionModel(
                     id="for_you",
                     title="Recommended for you",
-                    items=[AnimeSummaryModel.from_source(r) for r in filtered[:20]],
+                    items=filtered[:20],
                 )
 
         popular = await self.catalog.source.get_popular_shows(limit=50)
@@ -168,16 +139,15 @@ class RecommendationService:
         return RecommendationSectionModel(
             id="for_you",
             title="Recommended for you",
-            items=[AnimeSummaryModel.from_source(r) for r in offset_items],
+            items=offset_items,
         )
 
     async def _get_dynamic_genres(self, exclude: List[str] | None = None) -> List[str]:
-        """Extract and rank unique genres from the database and top trending source content."""
         counts = Counter()
         exclude_set = {g.strip().title() for g in (exclude or [])}
 
         try:
-            stmt = select(Anime.genres)
+            stmt = select(Show.genres)
             result = await self.db.execute(stmt)
             genre_rows = result.scalars().all()
             for row in genre_rows:
@@ -216,16 +186,12 @@ class RecommendationService:
     async def get_discovery_sections(
         self, page: int = 1, limit: int = 3, profile_id: str | None = None
     ) -> List[RecommendationSectionModel]:
-        """Fetch discovery sections (genres) for infinite scrolling.
-
-        Tries to skip empty/failed genres to ensure each 'page' has content.
-        """
         exclude_genres = []
         try:
             for_you = await self.get_for_you_section(profile_id=profile_id)
             if "Recommended for " in for_you.title:
                 genre_counts: Counter[str] = Counter()
-                stmt = select(Anime.genres)
+                stmt = select(Show.genres)
                 result = await self.db.execute(stmt)
                 for row in result.scalars().all():
                     if row:
@@ -261,7 +227,7 @@ class RecommendationService:
                 final_items = []
                 for r in filtered:
                     if r.id not in seen_ids:
-                        final_items.append(AnimeSummaryModel.from_source(r))
+                        final_items.append(r)
                         seen_ids.add(r.id)
                     if len(final_items) >= 20:
                         break
@@ -270,7 +236,7 @@ class RecommendationService:
                     sections.append(
                         RecommendationSectionModel(
                             id=f"genre_{genre.lower().replace(' ', '_')}_p{page}",
-                            title=f"{genre} Anime",
+                            title=genre,
                             items=final_items,
                         )
                     )

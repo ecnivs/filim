@@ -13,15 +13,15 @@ class ProfileListEntry(Base):
         nullable=False,
         index=True,
     )
-    anime_id: Mapped[str] = mapped_column(String, nullable=False)
+    show_id: Mapped[str] = mapped_column(String, nullable=False)
 
     profile: Mapped[Profile] = relationship(back_populates="list_entries")
 
     __table_args__ = (
         UniqueConstraint(
             "profile_id",
-            "anime_id",
-            name="uq_profile_list_profile_anime",
+            "show_id",
+            name="uq_profile_list_profile_show",
         ),
     )
 
@@ -34,7 +34,7 @@ class ProfileRating(Base):
         nullable=False,
         index=True,
     )
-    anime_id: Mapped[str] = mapped_column(String, nullable=False)
+    show_id: Mapped[str] = mapped_column(String, nullable=False)
     rating: Mapped[str] = mapped_column(String, nullable=False)
 
     profile: Mapped[Profile] = relationship(back_populates="ratings")
@@ -42,8 +42,8 @@ class ProfileRating(Base):
     __table_args__ = (
         UniqueConstraint(
             "profile_id",
-            "anime_id",
-            name="uq_profile_rating_profile_anime",
+            "show_id",
+            name="uq_profile_rating_profile_show",
         ),
     )
 

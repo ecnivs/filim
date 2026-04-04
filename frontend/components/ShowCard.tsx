@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 import { useProfile } from "@/lib/profile-context";
 
-export type AnimeSummaryCard = {
+export type ShowSummaryCard = {
     id: string;
     title: string;
     english_title?: string | null;
@@ -21,8 +21,8 @@ export type AnimeSummaryCard = {
     related_shows?: Array<{ relation: string; showId: string }>;
 };
 
-export type AnimeCardProps = {
-    anime: AnimeSummaryCard;
+export type ShowCardProps = {
+    show: ShowSummaryCard;
     href?: string;
     isInList?: boolean;
     onToggleList?: () => void;
@@ -30,24 +30,24 @@ export type AnimeCardProps = {
     variant?: "standard" | "simple";
 };
 
-export function AnimeCard({
-    anime,
+export function ShowCard({
+    show,
     isInList,
     onToggleList,
     variant = "standard",
     widthClassName = "w-[calc(92vw/3)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
-}: AnimeCardProps) {
+}: ShowCardProps) {
     const queryClient = useQueryClient();
     const router = useRouter();
     const { profile } = useProfile();
-    const playHref = `/watch/${anime.id}/1`;
-    const infoHref = `/anime/${anime.id}`;
+    const playHref = `/watch/${show.id}/1`;
+    const infoHref = `/show/${show.id}`;
 
     const prefetchDetails = () => {
         void queryClient.prefetchQuery({
-            queryKey: ["anime", anime.id],
+            queryKey: ["show", show.id],
             queryFn: async () => {
-                const res = await api.get(`/catalog/${anime.id}`);
+                const res = await api.get(`/catalog/${show.id}`);
                 return res.data;
             },
             staleTime: 5 * 60 * 1000,
@@ -55,8 +55,8 @@ export function AnimeCard({
     };
 
     const subtitle =
-        typeof anime.episode_count === "number" && anime.episode_count > 0
-            ? `${anime.episode_count} episodes`
+        typeof show.episode_count === "number" && show.episode_count > 0
+            ? `${show.episode_count} episodes`
             : undefined;
 
     const [imageFailed, setImageFailed] = useState(false);
@@ -76,10 +76,10 @@ export function AnimeCard({
             onMouseEnter={prefetchDetails}
         >
             <div className={`relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out ${variant === 'standard' ? 'md:group-hover/card:scale-[1.25] md:group-hover/card:z-30 md:group-hover/card:delay-[100ms]' : ''}`}>
-                {anime.poster_image_url && !imageFailed ? (
+                {show.poster_image_url && !imageFailed ? (
                     <Image
-                        src={anime.poster_image_url}
-                        alt={anime.title}
+                        src={show.poster_image_url}
+                        alt={show.title}
                         unoptimized
                         fill
                         sizes="(max-width: 640px) 31vw, (max-width: 1024px) 23vw, 15vw"
@@ -88,7 +88,7 @@ export function AnimeCard({
                     />
                 ) : (
                     <div className="w-full h-full bg-neutral-800 flex items-center justify-center">
-                        <span className="text-8xl font-black text-neutral-700">{anime.title.slice(0, 1)}</span>
+                        <span className="text-8xl font-black text-neutral-700">{show.title.slice(0, 1)}</span>
                     </div>
                 )}
 
@@ -157,11 +157,11 @@ export function AnimeCard({
 
                         <div className={`space-y-1 ${variant === 'simple' ? 'hidden' : 'block'}`} onClick={(e) => e.stopPropagation()}>
                             <p className="text-[0.65rem] font-black text-white leading-tight line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
-                                {anime.title}
+                                {show.title}
                             </p>
-                            {anime.tags && anime.tags.length > 0 && (
+                            {show.tags && show.tags.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-1.5 text-[0.55rem] text-neutral-300">
-                                    {anime.tags.slice(0, 2).map((tag: string, i: number) => (
+                                    {show.tags.slice(0, 2).map((tag: string, i: number) => (
                                         <span key={tag} className="flex items-center gap-1.5">
                                             {i > 0 && <span className="text-neutral-600 text-[8px]">•</span>}
                                             {tag}
@@ -177,7 +177,7 @@ export function AnimeCard({
                     <>
                         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent h-1/3 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none" />
                         <div className="absolute inset-x-0 bottom-0 p-2.5 hidden md:block md:opacity-100 md:group-hover/card:opacity-0 transition-opacity duration-200 group-hover/card:pointer-events-none">
-                            <p className="text-[0.75rem] font-semibold text-white line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{anime.title}</p>
+                            <p className="text-[0.75rem] font-semibold text-white line-clamp-2 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{show.title}</p>
                         </div>
                     </>
                 )}
@@ -185,7 +185,7 @@ export function AnimeCard({
             </div>
 
             <div className={`mt-1.5 px-0.5 ${variant === 'standard' ? 'md:hidden' : 'block'}`}>
-                <p className="text-[0.7rem] font-semibold text-neutral-200 line-clamp-2 leading-tight">{anime.title}</p>
+                <p className="text-[0.7rem] font-semibold text-neutral-200 line-clamp-2 leading-tight">{show.title}</p>
                 {subtitle && (
                     <p className="text-[0.6rem] text-neutral-500 mt-0.5">{subtitle}</p>
                 )}

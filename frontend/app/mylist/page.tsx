@@ -3,13 +3,13 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 import { GridView } from "@/components/GridView";
-import type { AnimeSummaryCard as AnimeSummary } from "@/components/AnimeCard";
+import type { ShowSummaryCard as ShowSummary } from "@/components/ShowCard";
 
 export default function MyListPage() {
     const infiniteQuery = useInfiniteQuery({
         queryKey: ["watchlist"],
         queryFn: async () => {
-            const res = await api.get<{ items: AnimeSummary[] }>("/user/list");
+            const res = await api.get<{ items: ShowSummary[] }>("/user/list");
             return res.data;
         },
         getNextPageParam: () => undefined,

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tansta
 import { api } from "@/lib/http";
 import Link from "next/link";
 import Image from "next/image";
-import { AnimeCard, type AnimeSummaryCard as AnimeSummary } from "@/components/AnimeCard";
+import { ShowCard, type ShowSummaryCard as ShowSummary } from "@/components/ShowCard";
 import { SectionRow } from "@/components/SectionRow";
 import { useSearchParams } from "next/navigation";
 import { ContinueCard } from "@/components/ContinueCard";
@@ -14,28 +14,19 @@ import { usePreferences } from "@/hooks/usePreferences";
 import { useProfile } from "@/lib/profile-context";
 
 type ContinueWatchingItem = {
-    anime_id: string;
+    show_id: string;
     episode: string;
     progress: number;
     position_seconds?: number;
     duration_seconds?: number;
-    anime_title?: string | null;
+    show_title?: string | null;
     cover_image_url?: string | null;
 };
 
 type RecommendationSection = {
     id: string;
     title: string;
-    items: AnimeSummary[];
-};
-
-type PreferenceItem = {
-    anime_id: string;
-    in_list: boolean;
-};
-
-type PreferencesResponse = {
-    items: PreferenceItem[];
+    items: ShowSummary[];
 };
 
 import { GridView } from "@/components/GridView";
@@ -102,7 +93,7 @@ export default function HomePage() {
         queryKey: ["search", urlQuery, urlGenres],
         enabled: urlQuery.length > 0 || urlGenres.length > 0,
         queryFn: async ({ pageParam = 1 }) => {
-            const res = await api.get<{ items: AnimeSummary[] }>("/catalog/search", {
+            const res = await api.get<{ items: ShowSummary[] }>("/catalog/search", {
                 params: { 
                     q: urlQuery, 
                     genres: urlGenres,
@@ -121,7 +112,7 @@ export default function HomePage() {
 
     const { handleToggleList, isInList } = usePreferences();
 
-    const featuredAnime = (() => {
+    const featuredShow = (() => {
         const candidates = [
             ...(recommendations.data?.flatMap((s) => s.items) || [])
         ];
@@ -132,12 +123,12 @@ export default function HomePage() {
     })();
 
     const billboardResumeHref = (() => {
-        if (!featuredAnime) return "#";
-        const progress = continueWatching.data?.find(item => item.anime_id === featuredAnime.id);
+        if (!featuredShow) return "#";
+        const progress = continueWatching.data?.find(item => item.show_id === featuredShow.id);
         if (progress && progress.episode) {
-            return `/watch/${featuredAnime.id}/${progress.episode}`;
+            return `/watch/${featuredShow.id}/${progress.episode}`;
         }
-        return `/watch/${featuredAnime.id}/1`;
+        return `/watch/${featuredShow.id}/1`;
     })();
 
     const isInitialLoading = recommendations.isLoading || discovery.isLoading;
@@ -152,13 +143,13 @@ export default function HomePage() {
                 />
             ) : (
                 <>
-                    {featuredAnime && (
+                    {featuredShow && (
                         <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[320px] md:min-h-[500px]">
                             <div className="absolute inset-0">
-                                {featuredAnime.banner_image_url || featuredAnime.poster_image_url ? (
+                                {featuredShow.banner_image_url || featuredShow.poster_image_url ? (
                                     <Image
-                                        src={featuredAnime.banner_image_url || (featuredAnime.poster_image_url as string)}
-                                        alt={featuredAnime.title}
+                                        src={featuredShow.banner_image_url || (featuredShow.poster_image_url as string)}
+                                        alt={featuredShow.title}
                                         fill
                                         priority
                                         sizes="100vw"
@@ -173,11 +164,11 @@ export default function HomePage() {
                             <div className="relative z-10 flex h-full items-end pb-16 md:pb-24 lg:pb-32 px-[4%]">
                                 <div className="max-w-lg animate-fade-in-up space-y-3 md:space-y-4">
                                     <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.1] drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                                        {featuredAnime.title}
+                                        {featuredShow.title}
                                     </h1>
-                                    {featuredAnime.synopsis && (
+                                    {featuredShow.synopsis && (
                                         <p className="text-xs md:text-sm lg:text-base text-neutral-200 line-clamp-2 md:line-clamp-3 leading-relaxed">
-                                            {featuredAnime.synopsis}
+                                            {featuredShow.synopsis}
                                         </p>
                                     )}
                                     <div className="flex items-center gap-2 md:gap-3 pt-1">
@@ -188,7 +179,7 @@ export default function HomePage() {
                                             <span className="text-base md:text-lg">▶</span> Play
                                         </Link>
                                         <Link
-                                            href={`/anime/${featuredAnime.id}`}
+                                            href={`/show/${featuredShow.id}`}
                                             className="flex items-center gap-2 rounded bg-neutral-500/50 px-4 md:px-6 py-2.5 md:py-2.5 text-xs md:text-sm font-bold text-white transition hover:bg-neutral-500/70 backdrop-blur-md min-h-[44px]"
                                         >
                                             <span className="text-base md:text-lg">ⓘ</span>
@@ -206,29 +197,29 @@ export default function HomePage() {
                                 {continueWatching.data
                                     .filter(
                                         (item) =>
-                                            item.anime_id &&
-                                            item.anime_id !== "undefined" &&
+                                            item.show_id &&
+                                            item.show_id !== "undefined" &&
                                             item.episode &&
                                             item.episode !== "undefined"
                                     )
                                     .map((item) => {
                                         return (
                                             <ContinueCard
-                                                key={`${item.anime_id}-${item.episode}`}
+                                                key={`${item.show_id}-${item.episode}`}
                                                 title={
-                                                    item.anime_title && item.anime_title.length > 0
-                                                        ? item.anime_title
+                                                    item.show_title && item.show_title.length > 0
+                                                        ? item.show_title
                                                         : `Episode ${item.episode}`
                                                 }
                                                 subtitle={`Episode ${item.episode}`}
-                                                href={`/watch/${item.anime_id}/${item.episode}`}
+                                                href={`/watch/${item.show_id}/${item.episode}`}
                                                 coverImageUrl={item.cover_image_url ?? undefined}
                                                 progress={item.progress}
                                                 positionSeconds={item.position_seconds}
                                                 durationSeconds={item.duration_seconds}
-                                                isInList={isInList(item.anime_id)}
-                                                onToggleList={() => handleToggleList(item.anime_id)}
-                                                animeId={item.anime_id}
+                                                isInList={isInList(item.show_id)}
+                                                onToggleList={() => handleToggleList(item.show_id)}
+                                                showId={item.show_id}
                                             />
                                         );
                                     })}
@@ -237,12 +228,12 @@ export default function HomePage() {
 
                         {recommendations.data?.filter(section => section.items.length > 0).map((section) => (
                             <SectionRow key={section.id} title={section.title}>
-                                {section.items.map((anime) => (
-                                    <AnimeCard
-                                        key={anime.id}
-                                        anime={anime}
-                                        isInList={isInList(anime.id)}
-                                        onToggleList={() => handleToggleList(anime.id)}
+                                {section.items.map((row) => (
+                                    <ShowCard
+                                        key={row.id}
+                                        show={row}
+                                        isInList={isInList(row.id)}
+                                        onToggleList={() => handleToggleList(row.id)}
                                     />
                                 ))}
                             </SectionRow>
@@ -254,12 +245,12 @@ export default function HomePage() {
                         {discovery.data?.pages.map((page) =>
                             page.map((section) => (
                                 <SectionRow key={section.id} title={section.title}>
-                                    {section.items.map((anime) => (
-                                        <AnimeCard
-                                            key={anime.id}
-                                            anime={anime}
-                                            isInList={isInList(anime.id)}
-                                            onToggleList={() => handleToggleList(anime.id)}
+                                    {section.items.map((row) => (
+                                        <ShowCard
+                                            key={row.id}
+                                            show={row}
+                                            isInList={isInList(row.id)}
+                                            onToggleList={() => handleToggleList(row.id)}
                                         />
                                     ))}
                                 </SectionRow>

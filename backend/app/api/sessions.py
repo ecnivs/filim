@@ -9,7 +9,7 @@ from app.sessions import SessionService, WatchProgressModel
 
 
 class ProgressBody(BaseModel):
-    anime_id: str
+    show_id: str
     episode: str
     position_seconds: float
     duration_seconds: float
@@ -17,12 +17,12 @@ class ProgressBody(BaseModel):
 
 
 class ContinueWatchingItem(BaseModel):
-    anime_id: str | None = None
+    show_id: str | None = None
     episode: str
     position_seconds: float
     duration_seconds: float
     progress: float
-    anime_title: Optional[str] = None
+    show_title: Optional[str] = None
     cover_image_url: Optional[str] = None
 
 
@@ -45,7 +45,7 @@ async def update_progress(
         device_token=x_device_token,
         client_ip=request.client.host if request.client else None,
         profile_id=x_profile_id,
-        anime_id=body.anime_id,
+        show_id=body.show_id,
         episode=body.episode,
         position_seconds=body.position_seconds,
         duration_seconds=body.duration_seconds,
@@ -75,31 +75,31 @@ async def continue_watching(
         )
         items.append(
             ContinueWatchingItem(
-                anime_id=row.anime_id,
+                show_id=row.show_id,
                 episode=row.episode,
                 position_seconds=row.position_seconds,
                 duration_seconds=row.duration_seconds,
                 progress=progress,
-                anime_title=row.anime_title,
+                show_title=row.show_title,
                 cover_image_url=row.cover_image_url,
             )
         )
     return {"items": items}
 
 
-@router.get("/user/progress/{anime_id}")
-async def get_anime_progress(
-    anime_id: str,
+@router.get("/user/progress/{show_id}")
+async def get_show_progress(
+    show_id: str,
     request: Request,
     x_device_token: str | None = Header(None, alias="X-Device-Token"),
     x_profile_id: str | None = Header(None, alias="X-Profile-Id"),
     service: SessionService = Depends(_get_session_service),
 ) -> dict[str, list[ContinueWatchingItem]]:
-    rows: list[WatchProgressModel] = await service.get_anime_progress(
+    rows: list[WatchProgressModel] = await service.get_show_progress(
         device_token=x_device_token,
         client_ip=request.client.host if request.client else None,
         profile_id=x_profile_id,
-        anime_id=anime_id,
+        show_id=show_id,
     )
     items: list[ContinueWatchingItem] = []
     for row in rows:
@@ -110,12 +110,12 @@ async def get_anime_progress(
         )
         items.append(
             ContinueWatchingItem(
-                anime_id=row.anime_id,
+                show_id=row.show_id,
                 episode=row.episode,
                 position_seconds=row.position_seconds,
                 duration_seconds=row.duration_seconds,
                 progress=progress,
-                anime_title=row.anime_title,
+                show_title=row.show_title,
                 cover_image_url=row.cover_image_url,
             )
         )

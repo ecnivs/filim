@@ -1,5 +1,5 @@
 from app.models.base import Base
-from app.models.catalog import Anime, AnimeStats, Episode
+from app.models.catalog import Show, ShowStats, Episode
 from app.models.devices import Device, WatchProgress
 from app.models.preferences import (
     ProfileAudioPreference,
@@ -10,9 +10,9 @@ from app.models.profiles import Profile
 
 __all__ = [
     "Base",
-    "Anime",
+    "Show",
     "Episode",
-    "AnimeStats",
+    "ShowStats",
     "Device",
     "WatchProgress",
     "Profile",

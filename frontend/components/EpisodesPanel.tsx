@@ -16,8 +16,8 @@ type EpisodeSummary = {
 };
 
 type EpisodesPanelProps = {
-    animeId: string;
-    animeTitle?: string;
+    showId: string;
+    showTitle?: string;
     episodes: EpisodeSummary[];
     currentEpisode: string;
     isOpen: boolean;
@@ -26,8 +26,8 @@ type EpisodesPanelProps = {
 };
 
 export function EpisodesPanel({
-    animeId,
-    animeTitle,
+    showId,
+    showTitle,
     episodes: initialEpisodes,
     currentEpisode,
     isOpen,
@@ -49,11 +49,11 @@ export function EpisodesPanel({
     // and exclude unrelated series titles.
     const filteredSeasons = seasons.filter(s =>
         /season|s\d+|part|cour/i.test(s.title) ||
-        s.id === animeId
+        s.id === showId
     );
 
     // Find the current season title
-    const currentSeason = filteredSeasons.find((s) => s.id === animeId) || filteredSeasons[0];
+    const currentSeason = filteredSeasons.find((s) => s.id === showId) || filteredSeasons[0];
 
     const episodeList = (isMobile: boolean) => (
         <>
@@ -92,7 +92,7 @@ export function EpisodesPanel({
                                     className={`group rounded-md transition-all duration-200 ${isFocused ? "bg-white/10 ring-1 ring-white/5" : ""} ${isCurrent && isMobile ? "bg-white/5" : ""}`}
                                 >
                                     <Link
-                                        href={`/watch/${animeId}/${ep.number}`}
+                                        href={`/watch/${showId}/${ep.number}`}
                                         replace
                                         className={`block ${isMobile ? "py-3.5 px-3" : "p-3"}`}
                                         onClick={onClose}
@@ -149,14 +149,14 @@ export function EpisodesPanel({
                     {/* Header for Seasons Mode */}
                     <div className={`border-b border-white/5 ${isMobile ? "px-4 py-4" : "px-6 py-6"} bg-white/5`}>
                         <h2 className="text-sm font-black text-neutral-500 uppercase tracking-[0.2em]">
-                            {animeTitle}
+                            {showTitle}
                         </h2>
                     </div>
 
                     {/* Season List */}
                     <div className="flex-1 overflow-y-auto py-1 custom-scrollbar">
                         {filteredSeasons.map((s) => {
-                            const isActive = s.id === animeId;
+                            const isActive = s.id === showId;
                             return (
                                 <button
                                     key={s.id}

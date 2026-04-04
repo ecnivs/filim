@@ -2,18 +2,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Anime, AnimeStats
-from app.sources import AllAnimeSourceAdapter, AnimeSummaryModel, EpisodeSummaryModel
+from app.models import Show, ShowStats
+from app.sources import AllanimeCatalogAdapter, ShowSummaryModel, EpisodeSummaryModel
 from app.core.utils import normalize_title
 from app.core.constants import MODE_SUB, SUPPORTED_RELATIONS, COMMON_GENRES
 
 
 class CatalogService:
-    """Catalog facade combining local cache and AllAnime source adapter."""
+    """Catalog facade combining local cache and upstream GraphQL adapter."""
 
-    def __init__(self, db: AsyncSession, source: AllAnimeSourceAdapter | None = None):
+    def __init__(self, db: AsyncSession, source: AllanimeCatalogAdapter | None = None):
         self.db = db
-        self.source = source or AllAnimeSourceAdapter()
+        self.source = source or AllanimeCatalogAdapter()
 
     async def search(
         self,
@@ -21,7 +21,7 @@ class CatalogService:
         mode: str = MODE_SUB,
         page: int = 1,
         genres: list[str] | None = None,
-    ) -> list[AnimeSummaryModel]:
+    ) -> list[ShowSummaryModel]:
         search_genres = genres or []
         if not genres and " " not in query:
             q_clean = query.strip().title()
@@ -38,12 +38,12 @@ class CatalogService:
         return self._deduplicate_results(results)
 
     def _deduplicate_results(
-        self, results: list[AnimeSummaryModel]
-    ) -> list[AnimeSummaryModel]:
+        self, results: list[ShowSummaryModel]
+    ) -> list[ShowSummaryModel]:
         if not results:
             return []
 
-        merged: dict[str, AnimeSummaryModel] = {}
+        merged: dict[str, ShowSummaryModel] = {}
         seen_ids: set[str] = set()
 
         for item in results:
@@ -64,23 +64,17 @@ class CatalogService:
 
         return list(merged.values())
 
-    async def _upsert_anime_from_summary(self, summary: AnimeSummaryModel) -> None:
-        """Persist or update a minimal Anime row for downstream features.
-
-        This ensures that other services (e.g. sessions/continue-watching) can
-        reliably join watch progress against anime metadata for titles and posters.
-        """
+    async def _upsert_show_from_summary(self, summary: ShowSummaryModel) -> None:
+        """Persist or update a minimal Show row for downstream features."""
 
         if not summary.id:
             return
 
-        result = await self.db.execute(
-            select(Anime).where(Anime.source_id == summary.id)
-        )
-        anime = result.scalar_one_or_none()
+        result = await self.db.execute(select(Show).where(Show.source_id == summary.id))
+        row = result.scalar_one_or_none()
 
-        if anime is None:
-            anime = Anime(
+        if row is None:
+            row = Show(
                 source_id=summary.id,
                 title=summary.title or "",
                 english_title=summary.english_title,
@@ -91,24 +85,24 @@ class CatalogService:
                 poster_url=summary.poster_image_url,
                 cover_image_url=summary.banner_image_url,
             )
-            self.db.add(anime)
+            self.db.add(row)
         else:
             if summary.title:
-                anime.title = summary.title
+                row.title = summary.title
             if summary.english_title:
-                anime.english_title = summary.english_title
+                row.english_title = summary.english_title
             if summary.alt_names:
-                anime.alt_names = summary.alt_names
+                row.alt_names = summary.alt_names
             if summary.synopsis:
-                anime.synopsis = summary.synopsis
+                row.synopsis = summary.synopsis
             if summary.tags:
-                anime.genres = summary.tags
+                row.genres = summary.tags
             if summary.episode_count:
-                anime.episode_count = summary.episode_count
+                row.episode_count = summary.episode_count
             if summary.poster_image_url:
-                anime.poster_url = summary.poster_image_url
+                row.poster_url = summary.poster_image_url
             if summary.banner_image_url:
-                anime.cover_image_url = summary.banner_image_url
+                row.cover_image_url = summary.banner_image_url
 
         try:
             await self.db.commit()
@@ -117,22 +111,22 @@ class CatalogService:
 
     async def get_show_details(
         self,
-        anime_id: str,
+        show_id: str,
         mode: str = MODE_SUB,
         search_query: str | None = None,
-    ) -> AnimeSummaryModel:
+    ) -> ShowSummaryModel:
         """Return show metadata, with fallbacks for IDs that only resolve via search."""
 
-        details = await self.source.get_show_details(show_id=anime_id, mode=mode)
+        details = await self.source.get_show_details(show_id=show_id, mode=mode)
 
-        summary: AnimeSummaryModel = details
+        summary: ShowSummaryModel = details
         if not (details.title or details.episode_count):
             if search_query:
                 search_results = await self.source.search_shows(
                     query=search_query, mode=mode
                 )
                 for item in search_results:
-                    if item.id == anime_id:
+                    if item.id == show_id:
                         summary = item
                         break
                 else:
@@ -140,28 +134,28 @@ class CatalogService:
             else:
                 popular = await self.source.get_popular_shows(limit=400, mode=mode)
                 for item in popular:
-                    if item.id == anime_id:
+                    if item.id == show_id:
                         summary = item
                         break
                 else:
                     summary = details
 
-        await self._upsert_anime_from_summary(summary)
+        await self._upsert_show_from_summary(summary)
         return summary
 
     async def get_episode_list(
         self,
-        anime_id: str,
+        show_id: str,
         mode: str = MODE_SUB,
         search_query: str | None = None,
     ) -> list[EpisodeSummaryModel]:
-        episodes = await self.source.get_episode_list(show_id=anime_id, mode=mode)
+        episodes = await self.source.get_episode_list(show_id=show_id, mode=mode)
 
         if episodes:
             return episodes
 
         details = await self.get_show_details(
-            anime_id=anime_id,
+            show_id=show_id,
             mode=mode,
             search_query=search_query,
         )
@@ -175,37 +169,35 @@ class CatalogService:
 
     async def get_trending(
         self, limit: int = 20, page: int = 1
-    ) -> list[AnimeSummaryModel]:
-        """Return trending shows based on AnimeStats and source metadata."""
+    ) -> list[ShowSummaryModel]:
+        """Return trending shows based on ShowStats and source metadata."""
 
         try:
             stmt = (
-                select(AnimeStats, Anime)
-                .join(Anime, Anime.id == AnimeStats.anime_id)
+                select(ShowStats, Show)
+                .join(Show, Show.id == ShowStats.show_id)
                 .order_by(
-                    AnimeStats.is_trending.desc(), AnimeStats.device_count_30d.desc()
+                    ShowStats.is_trending.desc(), ShowStats.device_count_30d.desc()
                 )
                 .offset((page - 1) * limit)
                 .limit(limit)
             )
-            rows: Sequence[tuple[AnimeStats, Anime]] = (
-                await self.db.execute(stmt)
-            ).all()
+            rows: Sequence[tuple[ShowStats, Show]] = (await self.db.execute(stmt)).all()
         except Exception:
             rows = []
 
         if rows:
-            results: list[AnimeSummaryModel] = []
-            for _stats, anime in rows:
+            results: list[ShowSummaryModel] = []
+            for _stats, show in rows:
                 results.append(
-                    AnimeSummaryModel(
-                        id=anime.source_id,
-                        title=anime.title,
-                        episode_count=anime.episode_count or 0,
-                        synopsis=anime.synopsis,
-                        tags=anime.genres or [],
-                        poster_image_url=anime.poster_url,
-                        banner_image_url=anime.cover_image_url,
+                    ShowSummaryModel(
+                        id=show.source_id,
+                        title=show.title,
+                        episode_count=show.episode_count or 0,
+                        synopsis=show.synopsis,
+                        tags=show.genres or [],
+                        poster_image_url=show.poster_url,
+                        banner_image_url=show.cover_image_url,
                     )
                 )
             return self._deduplicate_results(results)
@@ -215,7 +207,7 @@ class CatalogService:
 
     async def get_shows(
         self, limit: int = 40, page: int = 1, mode: str = MODE_SUB
-    ) -> list[AnimeSummaryModel]:
+    ) -> list[ShowSummaryModel]:
         """Return popular TV shows (more than 1 episode)."""
         popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
         filtered = [s for s in popular if (s.episode_count or 0) > 1]
@@ -223,21 +215,17 @@ class CatalogService:
 
     async def get_movies(
         self, limit: int = 40, page: int = 1, mode: str = MODE_SUB
-    ) -> list[AnimeSummaryModel]:
-        """Return popular Movies (exactly 1 episode)."""
+    ) -> list[ShowSummaryModel]:
+        """Return popular movies (exactly 1 episode)."""
         popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
         filtered = [s for s in popular if (s.episode_count or 0) == 1]
         return self._deduplicate_results(filtered)
 
     async def get_series_lineup(
-        self, anime_id: str, mode: str = MODE_SUB
-    ) -> list[AnimeSummaryModel]:
-        """Fetch all related seasons/shows for a given anime to build a series lineup.
-
-        This currently only does a single-level fetch of related shows to stay
-        performant, but could be extended to be recursive if needed.
-        """
-        root = await self.get_show_details(anime_id, mode=mode)
+        self, show_id: str, mode: str = MODE_SUB
+    ) -> list[ShowSummaryModel]:
+        """Fetch related seasons/shows for a series lineup."""
+        root = await self.get_show_details(show_id, mode=mode)
         if not root.related_shows:
             return [root]
 

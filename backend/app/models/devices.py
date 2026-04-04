@@ -32,7 +32,7 @@ class WatchProgress(Base):
         nullable=True,
         index=True,
     )
-    anime_id: Mapped[str] = mapped_column(String, nullable=False)
+    show_id: Mapped[str] = mapped_column(String, nullable=False)
     episode: Mapped[str] = mapped_column(String, nullable=False)
     position_seconds: Mapped[float] = mapped_column(nullable=False)
     duration_seconds: Mapped[float] = mapped_column(nullable=False)
@@ -50,8 +50,8 @@ class WatchProgress(Base):
         UniqueConstraint(
             "device_id",
             "profile_id",
-            "anime_id",
+            "show_id",
             "episode",
-            name="uq_watch_progress_device_profile_anime_episode",
+            name="uq_watch_progress_device_profile_show_episode",
         ),
     )

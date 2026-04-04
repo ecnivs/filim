@@ -21,6 +21,15 @@ const nextConfig = {
             }
         ]
     },
+    async redirects() {
+        return [
+            {
+                source: "/anime/:id",
+                destination: "/show/:id",
+                permanent: false
+            }
+        ];
+    },
     async rewrites() {
         return [
             {

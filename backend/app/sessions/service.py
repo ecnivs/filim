@@ -8,19 +8,19 @@ from pydantic import BaseModel
 from sqlalchemy import Select, and_, select
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Anime, Device, WatchProgress
+from app.models import Device, Show, WatchProgress
 
 logger = logging.getLogger(__name__)
 
 
 class WatchProgressModel(BaseModel):
-    anime_id: str | None = None
+    show_id: str | None = None
     episode: str
     position_seconds: float
     duration_seconds: float
     last_updated: datetime
     is_finished: bool
-    anime_title: str | None = None
+    show_title: str | None = None
     cover_image_url: str | None = None
 
 
@@ -64,7 +64,7 @@ class SessionService:
         device_token: str | None,
         client_ip: str | None,
         profile_id: str | None,
-        anime_id: str,
+        show_id: str,
         episode: str,
         position_seconds: float,
         duration_seconds: float,
@@ -94,7 +94,6 @@ class SessionService:
                 is_guest = profile_row.is_guest
 
         if is_guest:
-            # Guest profiles do not save progress
             return
 
         try:
@@ -116,7 +115,7 @@ class SessionService:
             stmt = insert(WatchProgress).values(
                 device_id=device.id,
                 profile_id=profile_id,
-                anime_id=anime_id,
+                show_id=show_id,
                 episode=episode,
                 position_seconds=position_seconds,
                 duration_seconds=duration_seconds,
@@ -124,7 +123,7 @@ class SessionService:
                 last_updated=now,
             )
             stmt = stmt.on_conflict_do_update(
-                index_elements=["device_id", "profile_id", "anime_id", "episode"],
+                index_elements=["device_id", "profile_id", "show_id", "episode"],
                 set_={
                     "position_seconds": position_seconds,
                     "duration_seconds": duration_seconds,
@@ -186,55 +185,55 @@ class SessionService:
 
         latest_sub = (
             select(
-                WatchProgress.anime_id,
+                WatchProgress.show_id,
                 func.max(WatchProgress.last_updated).label("max_updated"),
             )
             .where(history_filter)
-            .group_by(WatchProgress.anime_id)
+            .group_by(WatchProgress.show_id)
             .subquery()
         )
 
-        stmt: Select[tuple[WatchProgress, Anime]] = (
-            select(WatchProgress, Anime)
+        stmt: Select[tuple[WatchProgress, Show]] = (
+            select(WatchProgress, Show)
             .join(
                 latest_sub,
                 and_(
-                    WatchProgress.anime_id == latest_sub.c.anime_id,
+                    WatchProgress.show_id == latest_sub.c.show_id,
                     WatchProgress.last_updated == latest_sub.c.max_updated,
                 ),
             )
-            .join(Anime, Anime.source_id == WatchProgress.anime_id, isouter=True)
+            .join(Show, Show.source_id == WatchProgress.show_id, isouter=True)
             .where(history_filter)
             .order_by(WatchProgress.last_updated.desc())
             .limit(limit)
         )
         rows = (await self.db.execute(stmt)).all()
         items: list[WatchProgressModel] = []
-        for wp, anime in rows:
+        for wp, show in rows:
             items.append(
                 WatchProgressModel(
-                    anime_id=wp.anime_id,
+                    show_id=wp.show_id,
                     episode=wp.episode,
                     position_seconds=wp.position_seconds,
                     duration_seconds=wp.duration_seconds,
                     last_updated=wp.last_updated,
                     is_finished=wp.is_finished,
-                    anime_title=anime.title if anime is not None else None,
+                    show_title=show.title if show is not None else None,
                     cover_image_url=(
-                        anime.cover_image_url or anime.poster_url
-                        if anime is not None
+                        show.cover_image_url or show.poster_url
+                        if show is not None
                         else None
                     ),
                 )
             )
         return items
 
-    async def get_anime_progress(
+    async def get_show_progress(
         self,
         device_token: str | None,
         client_ip: str | None,
         profile_id: str | None,
-        anime_id: str,
+        show_id: str,
     ) -> List[WatchProgressModel]:
         def is_valid_uuid(val: str) -> bool:
             try:
@@ -268,12 +267,12 @@ class SessionService:
             history_filter = and_(
                 WatchProgress.device_id == device.id,
                 WatchProgress.profile_id.is_(None),
-                WatchProgress.anime_id == anime_id,
+                WatchProgress.show_id == show_id,
             )
         else:
             history_filter = and_(
                 WatchProgress.profile_id == profile_id,
-                WatchProgress.anime_id == anime_id,
+                WatchProgress.show_id == show_id,
             )
 
         stmt = select(WatchProgress).where(history_filter)
@@ -283,13 +282,13 @@ class SessionService:
         for wp in rows:
             items.append(
                 WatchProgressModel(
-                    anime_id=wp.anime_id,
+                    show_id=wp.show_id,
                     episode=wp.episode,
                     position_seconds=wp.position_seconds,
                     duration_seconds=wp.duration_seconds,
                     last_updated=wp.last_updated,
                     is_finished=wp.is_finished,
-                    anime_title=None,
+                    show_title=None,
                     cover_image_url=None,
                 )
             )

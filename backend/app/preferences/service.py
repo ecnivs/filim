@@ -8,7 +8,7 @@ from app.models import ProfileAudioPreference, ProfileListEntry, ProfileRating
 
 
 class PreferenceModel(BaseModel):
-    anime_id: str
+    show_id: str
     in_list: bool
     rating: Literal["like", "dislike"] | None
 
@@ -48,24 +48,24 @@ class PreferencesService:
         rating_map: dict[str, AllowedRating] = {}
 
         for entry in list_rows:
-            in_list_map[entry.anime_id] = True
+            in_list_map[entry.show_id] = True
         for rating in rating_rows:
-            rating_map[rating.anime_id] = rating.rating
+            rating_map[rating.show_id] = rating.rating
 
-        anime_ids = set(in_list_map.keys()) | set(rating_map.keys())
+        show_ids = set(in_list_map.keys()) | set(rating_map.keys())
         items: list[PreferenceModel] = []
-        for anime_id in sorted(anime_ids):
+        for sid in sorted(show_ids):
             items.append(
                 PreferenceModel(
-                    anime_id=anime_id,
-                    in_list=in_list_map.get(anime_id, False),
-                    rating=rating_map.get(anime_id),
+                    show_id=sid,
+                    in_list=in_list_map.get(sid, False),
+                    rating=rating_map.get(sid),
                 )
             )
         return items
 
-    async def get_list_anime_ids(self, profile_id: str) -> list[str]:
-        stmt = select(ProfileListEntry.anime_id).where(
+    async def get_list_show_ids(self, profile_id: str) -> list[str]:
+        stmt = select(ProfileListEntry.show_id).where(
             ProfileListEntry.profile_id == profile_id
         )
         rows = (await self.db.execute(stmt)).scalars().all()
@@ -74,34 +74,32 @@ class PreferencesService:
     async def set_in_list(
         self,
         profile_id: str,
-        anime_id: str,
+        show_id: str,
         in_list: bool,
     ) -> PreferenceModel:
         if in_list:
             stmt = select(ProfileListEntry).where(
                 ProfileListEntry.profile_id == profile_id,
-                ProfileListEntry.anime_id == anime_id,
+                ProfileListEntry.show_id == show_id,
             )
             row = (await self.db.execute(stmt)).scalar_one_or_none()
             if row is None:
-                row = ProfileListEntry(profile_id=profile_id, anime_id=anime_id)
+                row = ProfileListEntry(profile_id=profile_id, show_id=show_id)
                 self.db.add(row)
         else:
             stmt = delete(ProfileListEntry).where(
                 ProfileListEntry.profile_id == profile_id,
-                ProfileListEntry.anime_id == anime_id,
+                ProfileListEntry.show_id == show_id,
             )
             await self.db.execute(stmt)
 
         await self.db.commit()
-        return await self._build_single(
-            preferred_anime_id=anime_id, profile_id=profile_id
-        )
+        return await self._build_single(preferred_show_id=show_id, profile_id=profile_id)
 
     async def set_rating(
         self,
         profile_id: str,
-        anime_id: str,
+        show_id: str,
         rating: AllowedRating | None,
     ) -> PreferenceModel:
         if rating is not None and rating not in ("like", "dislike"):
@@ -110,19 +108,19 @@ class PreferencesService:
         if rating is None:
             stmt = delete(ProfileRating).where(
                 ProfileRating.profile_id == profile_id,
-                ProfileRating.anime_id == anime_id,
+                ProfileRating.show_id == show_id,
             )
             await self.db.execute(stmt)
         else:
             stmt = select(ProfileRating).where(
                 ProfileRating.profile_id == profile_id,
-                ProfileRating.anime_id == anime_id,
+                ProfileRating.show_id == show_id,
             )
             row = (await self.db.execute(stmt)).scalar_one_or_none()
             if row is None:
                 row = ProfileRating(
                     profile_id=profile_id,
-                    anime_id=anime_id,
+                    show_id=show_id,
                     rating=rating,
                 )
                 self.db.add(row)
@@ -130,31 +128,28 @@ class PreferencesService:
                 row.rating = rating
 
         await self.db.commit()
-        return await self._build_single(
-            preferred_anime_id=anime_id, profile_id=profile_id
-        )
+        return await self._build_single(preferred_show_id=show_id, profile_id=profile_id)
 
     async def _build_single(
-        self, preferred_anime_id: str, profile_id: str
+        self, preferred_show_id: str, profile_id: str
     ) -> PreferenceModel:
         in_list_stmt = select(ProfileListEntry).where(
             ProfileListEntry.profile_id == profile_id,
-            ProfileListEntry.anime_id == preferred_anime_id,
+            ProfileListEntry.show_id == preferred_show_id,
         )
         rating_stmt = select(ProfileRating).where(
             ProfileRating.profile_id == profile_id,
-            ProfileRating.anime_id == preferred_anime_id,
+            ProfileRating.show_id == preferred_show_id,
         )
         list_entry = (await self.db.execute(in_list_stmt)).scalar_one_or_none()
         rating_entry = (await self.db.execute(rating_stmt)).scalar_one_or_none()
 
         return PreferenceModel(
-            anime_id=preferred_anime_id,
+            show_id=preferred_show_id,
             in_list=bool(list_entry),
             rating=rating_entry.rating if rating_entry is not None else None,
         )
 
-    # Audio Preferences (Merged)
     async def get_audio_preference_for_profile(
         self, profile_id: str
     ) -> Optional[AudioPreferenceModel]:

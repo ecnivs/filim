@@ -55,7 +55,6 @@ COMMON_GENRES = {
     "Thriller",
     "Mecha",
     "Music",
-    "Slice of Life",
     "Isekai",
     "Seinen",
     "Shounen",
@@ -73,3 +72,15 @@ COMMON_GENRES = {
     "Police",
     "Samurai",
 }
+
+
+def genres_for_upstream_api(genres: list[str]) -> list[str]:
+    """Map short UI genre names to upstream catalog search filter labels."""
+    out: list[str] = []
+    for g in genres:
+        t = g.strip()
+        if t in COMMON_GENRES:
+            out.append(f"{t} Anime")
+        else:
+            out.append(t)
+    return out

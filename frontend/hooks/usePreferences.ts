@@ -5,7 +5,7 @@ import { api } from "@/lib/http";
 import { useProfile } from "@/lib/profile-context";
 
 type PreferenceItem = {
-    anime_id: string;
+    show_id: string;
     in_list: boolean;
 };
 
@@ -26,14 +26,14 @@ export function usePreferences() {
         }
     });
 
-    const getPreferenceForAnime = (animeId: string): PreferenceItem | undefined => {
-        return preferences.data?.find((item) => item.anime_id === animeId);
+    const getPreferenceForShow = (showId: string): PreferenceItem | undefined => {
+        return preferences.data?.find((item) => item.show_id === showId);
     };
 
     const toggleList = useMutation({
-        mutationFn: async (payload: { animeId: string; inList: boolean }) => {
+        mutationFn: async (payload: { showId: string; inList: boolean }) => {
             await api.post("/user/preferences/list", {
-                anime_id: payload.animeId,
+                show_id: payload.showId,
                 in_list: payload.inList
             });
         },
@@ -42,17 +42,17 @@ export function usePreferences() {
         }
     });
 
-    const handleToggleList = (animeId: string) => {
+    const handleToggleList = (showId: string) => {
         if (profile?.is_guest) return;
-        const current = getPreferenceForAnime(animeId);
+        const current = getPreferenceForShow(showId);
         const nextInList = !current?.in_list;
-        toggleList.mutate({ animeId, inList: nextInList });
+        toggleList.mutate({ showId, inList: nextInList });
     };
 
     return {
         preferences,
-        getPreferenceForAnime,
+        getPreferenceForShow,
         handleToggleList,
-        isInList: (animeId: string) => getPreferenceForAnime(animeId)?.in_list ?? false,
+        isInList: (showId: string) => getPreferenceForShow(showId)?.in_list ?? false,
     };
 }

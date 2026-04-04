@@ -1,13 +1,13 @@
-from app.sources.allanime_adapter import (
-    AllAnimeSourceAdapter,
-    AnimeSummaryModel,
+from app.sources.allanime_catalog import (
+    AllanimeCatalogAdapter,
+    ShowSummaryModel,
     EpisodeSummaryModel,
     StreamCandidateModel,
 )
 
 __all__ = [
-    "AllAnimeSourceAdapter",
-    "AnimeSummaryModel",
+    "AllanimeCatalogAdapter",
+    "ShowSummaryModel",
     "EpisodeSummaryModel",
     "StreamCandidateModel",
 ]

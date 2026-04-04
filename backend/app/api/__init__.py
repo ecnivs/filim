@@ -11,7 +11,7 @@ from app.api import (
 router = APIRouter()
 
 router.include_router(catalog.router, prefix="/catalog", tags=["catalog"])
-router.include_router(streams.router, prefix="/anime", tags=["streams"])
+router.include_router(streams.router, prefix="/stream", tags=["streams"])
 router.include_router(profiles.router, prefix="/profiles", tags=["profiles"])
 router.include_router(sessions.router, tags=["devices", "sessions"])
 router.include_router(recommendations.router, prefix="/user", tags=["recommendations"])

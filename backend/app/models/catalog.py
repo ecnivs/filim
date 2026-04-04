@@ -14,8 +14,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 
-class Anime(Base):
-    __tablename__ = "anime"
+class Show(Base):
+    __tablename__ = "shows"
 
     source_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
@@ -29,10 +29,10 @@ class Anime(Base):
     poster_url: Mapped[str | None] = mapped_column(String, nullable=True)
     cover_image_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    allanime_raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    provider_raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     episodes: Mapped[list["Episode"]] = relationship(
-        back_populates="anime",
+        back_populates="show",
         cascade="all, delete-orphan",
     )
 
@@ -40,8 +40,8 @@ class Anime(Base):
 class Episode(Base):
     __tablename__ = "episodes"
 
-    anime_id: Mapped[str] = mapped_column(
-        ForeignKey("anime.id", ondelete="CASCADE"),
+    show_id: Mapped[str] = mapped_column(
+        ForeignKey("shows.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -50,16 +50,16 @@ class Episode(Base):
     air_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    allanime_raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    provider_raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
-    anime: Mapped[Anime] = relationship(back_populates="episodes")
+    show: Mapped[Show] = relationship(back_populates="episodes")
 
 
-class AnimeStats(Base):
-    __tablename__ = "anime_stats"
+class ShowStats(Base):
+    __tablename__ = "show_stats"
 
-    anime_id: Mapped[str] = mapped_column(
-        ForeignKey("anime.id", ondelete="CASCADE"),
+    show_id: Mapped[str] = mapped_column(
+        ForeignKey("shows.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
     )
@@ -72,5 +72,5 @@ class AnimeStats(Base):
     is_trending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
-        Index("ix_anime_stats_trending_score", "is_trending", "device_count_30d"),
+        Index("ix_show_stats_trending_score", "is_trending", "device_count_30d"),
     )

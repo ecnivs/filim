@@ -3,22 +3,23 @@ from dataclasses import dataclass
 from typing import Any, List, Optional
 import json
 import re
+import html
+import logging
 import httpx
 from pydantic import BaseModel
 from app.core.config import settings
 from app.core.cache import cache_response
-from app.core.constants import DEFAULT_USER_AGENT, MODE_SUB
+from app.core.constants import DEFAULT_USER_AGENT, MODE_SUB, genres_for_upstream_api
+from app.core.utils import normalize_genre_list
 from app.sources.queries import (
     SEARCH_SHOWS_QUERY,
     SHOW_DETAILS_QUERY,
     EPISODE_LIST_QUERY,
     EPISODE_METADATA_QUERY,
 )
-import html
-import logging
 
 
-class AnimeSummaryModel(BaseModel):
+class ShowSummaryModel(BaseModel):
     id: Optional[str] = None
     title: str
     english_title: Optional[str] = None
@@ -50,14 +51,12 @@ class StreamCandidateModel(BaseModel):
 
 
 @dataclass
-class _AllAnimeClient:
+class _AllanimeGraphqlClient:
     base_url: str
     referer: str
     timeout: float
 
     async def query(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
-        """Execute a GraphQL query against the AllAnime API."""
-
         async with httpx.AsyncClient(
             base_url=self.base_url,
             headers={
@@ -95,24 +94,28 @@ def strip_html(text: str | None) -> str | None:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
-class AllAnimeSourceAdapter:
-    """Adapter that reimplements ani-cli behavior against the AllAnime GraphQL API."""
+def _normalized_tags(raw: list[str] | None) -> list[str]:
+    return normalize_genre_list(list(raw or []))
+
+
+class AllanimeCatalogAdapter:
+    """Search, episodes, and stream URLs against the allanime.day GraphQL API."""
 
     def __init__(self) -> None:
-        self._client = _AllAnimeClient(
+        self._client = _AllanimeGraphqlClient(
             base_url=settings.allanime_api_url,
             referer=settings.allanime_referer,
             timeout=settings.http_timeout_seconds,
         )
 
-    @cache_response(ttl_seconds=3600, response_model=AnimeSummaryModel)
+    @cache_response(ttl_seconds=3600, response_model=ShowSummaryModel)
     async def search_shows(
         self,
         query: str,
         mode: str = MODE_SUB,
         page: int = 1,
         genres: list[str] | None = None,
-    ) -> List[AnimeSummaryModel]:
+    ) -> List[ShowSummaryModel]:
         variables = {
             "search": {
                 "query": query,
@@ -125,10 +128,10 @@ class AllAnimeSourceAdapter:
             "countryOrigin": "ALL",
         }
         if genres:
-            variables["search"]["genres"] = genres
+            variables["search"]["genres"] = genres_for_upstream_api(genres)
         data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
-        results: list[AnimeSummaryModel] = []
+        results: list[ShowSummaryModel] = []
         for edge in edges:
             episodes_detail = edge.get("availableEpisodesDetail") or {}
             episode_count = len(episodes_detail.get(mode, []) or [])
@@ -146,13 +149,13 @@ class AllAnimeSourceAdapter:
             source_id = edge.get("_id")
             title = edge.get("englishName") or edge.get("name") or ""
             results.append(
-                AnimeSummaryModel(
+                ShowSummaryModel(
                     id=str(source_id) if source_id else None,
                     title=title,
                     english_title=edge.get("englishName"),
                     episode_count=episode_count,
                     synopsis=strip_html(edge.get("description")) or None,
-                    tags=list(edge.get("genres") or []),
+                    tags=_normalized_tags(edge.get("genres")),
                     poster_image_url=thumb,
                     banner_image_url=edge.get("banner"),
                     available_audio_languages=languages,
@@ -162,21 +165,14 @@ class AllAnimeSourceAdapter:
             )
         return results
 
-    @cache_response(ttl_seconds=1800, response_model=AnimeSummaryModel)
+    @cache_response(ttl_seconds=1800, response_model=ShowSummaryModel)
     async def get_popular_shows(
         self,
         limit: int = 20,
         page: int = 1,
         mode: str = MODE_SUB,
         genres: list[str] | None = None,
-    ) -> list[AnimeSummaryModel]:
-        """Best-effort popular list for use as a fallback 'Trending' row.
-
-        This mirrors the search GraphQL but uses an empty query with
-        allowUnknown=true to let the upstream API decide a reasonable default
-        ordering.
-        """
-
+    ) -> list[ShowSummaryModel]:
         variables = {
             "search": {
                 "query": "",
@@ -189,10 +185,10 @@ class AllAnimeSourceAdapter:
             "countryOrigin": "ALL",
         }
         if genres:
-            variables["search"]["genres"] = genres
+            variables["search"]["genres"] = genres_for_upstream_api(genres)
         data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
-        results: list[AnimeSummaryModel] = []
+        results: list[ShowSummaryModel] = []
         for edge in edges:
             episodes_detail = edge.get("availableEpisodesDetail") or {}
             episode_count = len(episodes_detail.get(mode, []) or [])
@@ -210,13 +206,13 @@ class AllAnimeSourceAdapter:
             source_id = edge.get("_id")
             title = edge.get("englishName") or edge.get("name") or ""
             results.append(
-                AnimeSummaryModel(
+                ShowSummaryModel(
                     id=str(source_id) if source_id else None,
                     title=title,
                     english_title=edge.get("englishName"),
                     episode_count=episode_count,
                     synopsis=strip_html(edge.get("description")) or None,
-                    tags=list(edge.get("genres") or []),
+                    tags=_normalized_tags(edge.get("genres")),
                     poster_image_url=thumb,
                     banner_image_url=edge.get("banner"),
                     available_audio_languages=languages,
@@ -226,12 +222,12 @@ class AllAnimeSourceAdapter:
             )
         return results
 
-    @cache_response(ttl_seconds=3600, response_model=AnimeSummaryModel)
+    @cache_response(ttl_seconds=3600, response_model=ShowSummaryModel)
     async def get_show_details(
         self,
         show_id: str,
         mode: str = MODE_SUB,
-    ) -> AnimeSummaryModel:
+    ) -> ShowSummaryModel:
         variables = {"id": show_id}
         data = await self._client.query(SHOW_DETAILS_QUERY, variables)
         show = data.get("show") or {}
@@ -256,13 +252,13 @@ class AllAnimeSourceAdapter:
             thumb = f"{base}/{thumb.lstrip('/')}"
         source_id = show.get("_id")
         title = show.get("englishName") or show.get("name") or ""
-        return AnimeSummaryModel(
+        return ShowSummaryModel(
             id=str(source_id) if source_id else None,
             title=title,
             english_title=show.get("englishName"),
             episode_count=episode_count,
             synopsis=strip_html(show.get("description")) or None,
-            tags=list(show.get("genres") or []),
+            tags=_normalized_tags(show.get("genres")),
             poster_image_url=thumb,
             banner_image_url=show.get("banner"),
             available_audio_languages=languages,
@@ -295,12 +291,6 @@ class AllAnimeSourceAdapter:
         episode: str,
         mode: str = MODE_SUB,
     ) -> list[StreamCandidateModel]:
-        """Resolve provider stream candidates for a given episode.
-
-        This mirrors ani-cli's episode → sourceUrls → provider-flow at a high level,
-        but uses Python and Pydantic instead of shell utilities.
-        """
-
         variables = {
             "showId": show_id,
             "translationType": mode,
@@ -317,7 +307,7 @@ class AllAnimeSourceAdapter:
                 "translationType": fallback_mode,
                 "episodeString": str(episode),
             }
-            data = await self._client.query(gql, variables)
+            data = await self._client.query(EPISODE_METADATA_QUERY, variables)
             episode_data = data.get("episode") or {}
             source_urls = episode_data.get("sourceUrls") or []
 
@@ -351,13 +341,6 @@ class AllAnimeSourceAdapter:
         provider: str,
         encoded: str,
     ) -> tuple[str | None, str, str | None, bool]:
-        """Decode a provider-specific source URL token.
-
-        The exact obfuscation used by AllAnime providers may change over time;
-        this implementation intentionally mirrors ani-cli at a structural level
-        without copying its code. It should be adapted as protocols evolve.
-        """
-
         url = encoded
         kind = "m3u8" if ".m3u8" in url else "mp4"
 

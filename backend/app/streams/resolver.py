@@ -37,7 +37,7 @@ class StreamResolver:
         """Return a direct media URL for a given provider candidate.
 
         Args:
-            candidate: Provider candidate returned by AllAnimeSourceAdapter.
+            candidate: Provider candidate returned by the catalog stream adapter.
             preferred_quality: Optional quality hint such as "1080p" or "720p".
 
         Raises:
@@ -68,13 +68,13 @@ class StreamResolver:
                     resp.raise_for_status()
             except httpx.HTTPError as exc:
                 raise StreamResolverError(
-                    f"Failed to resolve AllAnime clock URL: {exc}"
+                    f"Failed to resolve provider clock URL: {exc}"
                 ) from exc
 
             data = resp.json()
             links = data.get("links") or []
             if not links:
-                raise StreamResolverError("AllAnime clock JSON contained no links")
+                raise StreamResolverError("Provider clock JSON contained no links")
 
             def resolution_score(entry: dict) -> int:
                 label = str(entry.get("resolutionStr") or "").lower()
@@ -86,7 +86,7 @@ class StreamResolver:
             chosen_entry = max(links, key=resolution_score)
             stream_url = chosen_entry.get("link") or chosen_entry.get("src")
             if not stream_url:
-                raise StreamResolverError("AllAnime clock link entry missing URL")
+                raise StreamResolverError("Provider clock link entry missing URL")
 
             kind = "hls" if ".m3u8" in stream_url else "file"
             return ResolvedStream(

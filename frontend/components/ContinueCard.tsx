@@ -16,7 +16,7 @@ type ContinueCardProps = {
     durationSeconds?: number;
     isInList?: boolean;
     onToggleList?: () => void;
-    animeId?: string;
+    showId?: string;
     widthClassName?: string;
 };
 
@@ -30,7 +30,7 @@ export function ContinueCard({
     durationSeconds,
     isInList,
     onToggleList,
-    animeId,
+    showId,
     widthClassName = "w-[calc(92vw/3)] sm:w-[calc(92vw/3)] md:w-[calc(92vw/4)] lg:w-[calc(92vw/5)] xl:w-[calc(92vw/6)]"
 }: ContinueCardProps) {
     const router = useRouter();
@@ -114,7 +114,7 @@ export function ContinueCard({
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            router.push(`/anime/${animeId}`);
+                                            router.push(`/show/${showId}`);
                                         }}
                                         className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-neutral-500 text-neutral-400 hover:border-white hover:text-white transition-colors"
                                     >
@@ -192,12 +192,12 @@ export function ContinueCard({
 
                     <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
 
-                    {animeId && (
+                    {showId && (
                         <button
                             type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                router.push(`/anime/${animeId}`);
+                                router.push(`/show/${showId}`);
                             }}
                             className="absolute bottom-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm border border-white/20 text-neutral-300 active:scale-95 transition-transform"
                             aria-label="More Info"

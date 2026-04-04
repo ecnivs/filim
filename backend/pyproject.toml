@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "filim-backend"
 version = "0.1.0"
-description = "LAN-only streaming backend reimplementing ani-cli behavior using FastAPI."
+description = "LAN-only streaming backend for catalog and playback using FastAPI."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [

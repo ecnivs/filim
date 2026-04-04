@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.sources import EpisodeSummaryModel
 
 
-class AnimeSummaryResponse(BaseModel):
+class ShowSummaryResponse(BaseModel):
     id: str | None = None
     title: str
     episode_count: int
@@ -18,7 +18,7 @@ class AnimeSummaryResponse(BaseModel):
     available_audio_languages: list[str] = []
 
     @classmethod
-    def from_source(cls, src: Any) -> "AnimeSummaryResponse":
+    def from_source(cls, src: Any) -> "ShowSummaryResponse":
         if isinstance(src, dict):
             return cls(
                 id=src.get("id"),
@@ -57,7 +57,7 @@ class EpisodeSummaryResponse(BaseModel):
         )
 
 
-class AnimeDetailsResponse(BaseModel):
+class ShowDetailsResponse(BaseModel):
     id: str | None = None
     title: str
     episode_count: int
@@ -83,19 +83,19 @@ async def search_catalog(
     genres: str | None = Query(None),
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
-) -> dict[str, list[AnimeSummaryResponse]]:
+) -> dict[str, list[ShowSummaryResponse]]:
     genre_list = [g.strip() for g in genres.split(",")] if genres else None
     items = await catalog.search(query=q, mode=mode, page=page, genres=genre_list)
-    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
+    return {"items": [ShowSummaryResponse.from_source(i) for i in items]}
 
 
 @router.get("/trending")
 async def get_trending(
     page: int = Query(1, ge=1),
     catalog: CatalogService = Depends(_get_catalog_service),
-) -> dict[str, list[AnimeSummaryResponse]]:
+) -> dict[str, list[ShowSummaryResponse]]:
     items = await catalog.get_trending(page=page)
-    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
+    return {"items": [ShowSummaryResponse.from_source(i) for i in items]}
 
 
 @router.get("/shows")
@@ -104,9 +104,9 @@ async def get_shows(
     limit: int = Query(40, ge=1, le=100),
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
-) -> dict[str, list[AnimeSummaryResponse]]:
+) -> dict[str, list[ShowSummaryResponse]]:
     items = await catalog.get_shows(limit=limit, page=page, mode=mode)
-    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
+    return {"items": [ShowSummaryResponse.from_source(i) for i in items]}
 
 
 @router.get("/movies")
@@ -115,33 +115,33 @@ async def get_movies(
     limit: int = Query(40, ge=1, le=100),
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
-) -> dict[str, list[AnimeSummaryResponse]]:
+) -> dict[str, list[ShowSummaryResponse]]:
     items = await catalog.get_movies(limit=limit, page=page, mode=mode)
-    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
+    return {"items": [ShowSummaryResponse.from_source(i) for i in items]}
 
 
-@router.get("/{anime_id}")
-async def get_anime_details(
-    anime_id: str,
+@router.get("/{show_id}")
+async def get_show_details(
+    show_id: str,
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     q: str | None = Query(None, min_length=1),
     catalog: CatalogService = Depends(_get_catalog_service),
-) -> AnimeDetailsResponse:
+) -> ShowDetailsResponse:
     details = await catalog.get_show_details(
-        anime_id=anime_id,
+        show_id=show_id,
         mode=mode,
         search_query=q,
     )
     episodes = await catalog.get_episode_list(
-        anime_id=anime_id,
+        show_id=show_id,
         mode=mode,
         search_query=q,
     )
 
     if (not details.title and details.episode_count == 0) and not episodes:
-        raise HTTPException(status_code=404, detail="Anime not found")
+        raise HTTPException(status_code=404, detail="Show not found")
 
-    return AnimeDetailsResponse(
+    return ShowDetailsResponse(
         id=details.id,
         title=details.title,
         episode_count=details.episode_count,
@@ -154,22 +154,21 @@ async def get_anime_details(
     )
 
 
-@router.get("/{anime_id}/episodes")
-async def get_anime_episodes(
-    anime_id: str,
+@router.get("/{show_id}/episodes")
+async def get_show_episodes(
+    show_id: str,
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
 ) -> dict[str, list[EpisodeSummaryResponse]]:
-    episodes = await catalog.get_episode_list(anime_id=anime_id, mode=mode)
+    episodes = await catalog.get_episode_list(show_id=show_id, mode=mode)
     return {"items": [EpisodeSummaryResponse.from_source(e) for e in episodes]}
 
 
-@router.get("/{anime_id}/series")
-async def get_anime_series(
-    anime_id: str,
+@router.get("/{show_id}/series")
+async def get_show_series(
+    show_id: str,
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
-) -> dict[str, list[AnimeSummaryResponse]]:
-    """Return all related seasons/shows for a given anime to build a series lineup."""
-    items = await catalog.get_series_lineup(anime_id=anime_id, mode=mode)
-    return {"items": [AnimeSummaryResponse.from_source(i) for i in items]}
+) -> dict[str, list[ShowSummaryResponse]]:
+    items = await catalog.get_series_lineup(show_id=show_id, mode=mode)
+    return {"items": [ShowSummaryResponse.from_source(i) for i in items]}

@@ -67,7 +67,7 @@ type PlayerProps = {
     nextEpisodeLabel?: string;
     onBack?: () => void;
     onShowEpisodes?: () => void;
-    animeId?: string;
+    showId?: string;
     episodes?: { number: string; title?: string | null; season?: number }[];
     seasons?: { id: string; title: string }[];
     isMovie?: boolean;
@@ -115,7 +115,7 @@ export function Player({
     nextEpisodeLabel,
     onBack,
     onShowEpisodes,
-    animeId,
+    showId,
     episodes,
     seasons,
     isMovie = false,
@@ -252,8 +252,8 @@ export function Player({
         const resumeTime = isEpisodeSwitch
             ? (initialTimeSecondsRef.current ?? 0)
             : savedTime > 0
-              ? savedTime
-              : (initialTimeSecondsRef.current ?? 0);
+                ? savedTime
+                : (initialTimeSecondsRef.current ?? 0);
 
         const applyResumeTime = () => {
             if (resumeTime > 0 && (!video.duration || resumeTime < video.duration)) {
@@ -1033,13 +1033,13 @@ export function Player({
     const resolvedQualityOptions = useHlsQualityMenu
         ? hlsQualityOptions
         : qualityOptionsProp && qualityOptionsProp.length > 0
-          ? qualityOptionsProp
-          : [];
+            ? qualityOptionsProp
+            : [];
     const resolvedQualityValue = useHlsQualityMenu
         ? hlsQualityValue
         : qualityOptionsProp && qualityOptionsProp.length > 0
-          ? currentQualityId ?? "auto"
-          : "auto";
+            ? currentQualityId ?? "auto"
+            : "auto";
 
     const handleResolvedQualityChange = (id: string) => {
         if (hlsQualityOptions.length > 0) {
@@ -1187,14 +1187,14 @@ export function Player({
                                             isFinished: false
                                         });
                                     }
-                                    
+
                                     exitingFullscreenRef.current = true;
                                     const fsElement =
                                         document.fullscreenElement ||
                                         (document as any).webkitFullscreenElement;
                                     if (fsElement) {
                                         if (document.exitFullscreen) {
-                                            void document.exitFullscreen().catch(() => {});
+                                            void document.exitFullscreen().catch(() => { });
                                         } else if ((document as any).webkitExitFullscreen) {
                                             void ((document as any).webkitExitFullscreen)();
                                         }
@@ -1249,10 +1249,10 @@ export function Player({
                         !isBuffering &&
                         isPlayerReady &&
                         !showStreamReloadSpinner && (
-                        <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                            <Play className="h-7 w-7 sm:h-10 sm:w-10 text-white fill-white ml-1 sm:ml-2 drop-shadow-lg" />
-                        </div>
-                    )}
+                            <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                                <Play className="h-7 w-7 sm:h-10 sm:w-10 text-white fill-white ml-1 sm:ml-2 drop-shadow-lg" />
+                            </div>
+                        )}
                     {/* Spinner: stream refetch (episode / audio / quality), rebuffer, or first frame. */}
                     {showStreamReloadSpinner && (
                         <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center">
@@ -1497,8 +1497,8 @@ export function Player({
                                                 </button>
 
                                                 <EpisodesPanel
-                                                    animeId={animeId || ""}
-                                                    animeTitle={title || "Episodes"}
+                                                    showId={showId || ""}
+                                                    showTitle={title || "Episodes"}
                                                     episodes={episodes || []}
                                                     currentEpisode={episodeLabel || ""}
                                                     isOpen={activeMenu === "episodes"}

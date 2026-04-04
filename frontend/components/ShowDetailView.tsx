@@ -5,7 +5,7 @@ import { api } from "@/lib/http";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { AnimeCard, type AnimeSummaryCard } from "./AnimeCard";
+import { ShowCard, type ShowSummaryCard } from "./ShowCard";
 import { useState } from "react";
 import { useProfile } from "@/lib/profile-context";
 
@@ -14,7 +14,7 @@ type Episode = {
     title?: string | null;
 };
 
-type AnimeDetails = {
+type ShowDetails = {
     id: string;
     title: string;
     episode_count: number;
@@ -28,20 +28,20 @@ type AnimeDetails = {
 type RecommendationSection = {
     id: string;
     title: string;
-    items: AnimeSummaryCard[];
+    items: ShowSummaryCard[];
 };
 
 type PreferenceItem = {
-    anime_id: string;
+    show_id: string;
     in_list: boolean;
 };
 
-interface AnimeDetailViewProps {
+interface ShowDetailViewProps {
     id: string;
-    initialData?: AnimeDetails;
+    initialData?: ShowDetails;
 }
 
-export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
+export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
     const queryClient = useQueryClient();
     const router = useRouter();
     const { profile } = useProfile();
@@ -50,16 +50,16 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
         data,
         isLoading
     } = useQuery({
-        queryKey: ["anime", id],
+        queryKey: ["show", id],
         initialData,
         queryFn: async () => {
-            const res = await api.get<AnimeDetails>(`/catalog/${id}`);
+            const res = await api.get<ShowDetails>(`/catalog/${id}`);
             return res.data;
         }
     });
 
     const recs = useQuery({
-        queryKey: ["anime-recs", id],
+        queryKey: ["show-recs", id],
         enabled: !!id && !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ sections: RecommendationSection[] }>(
@@ -85,28 +85,28 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
         queryKey: ["continue-watching"],
         enabled: !profile?.is_guest,
         queryFn: async () => {
-            const res = await api.get<{ items: { anime_id: string; episode: string }[] }>("/user/continue-watching");
+            const res = await api.get<{ items: { show_id: string; episode: string }[] }>("/user/continue-watching");
             return res.data.items;
         }
     });
 
-    const animeProgress = useQuery({
-        queryKey: ["anime-progress", id],
+    const showProgress = useQuery({
+        queryKey: ["show-progress", id],
         enabled: !!id && !profile?.is_guest,
         queryFn: async () => {
-            const res = await api.get<{ items: { anime_id: string; episode: string; progress: number }[] }>(`/user/progress/${id}`);
+            const res = await api.get<{ items: { show_id: string; episode: string; progress: number }[] }>(`/user/progress/${id}`);
             return res.data.items;
         }
     });
 
-    const getPreferenceForAnime = (animeId: string): PreferenceItem | undefined => {
-        return preferences.data?.find((item) => item.anime_id === animeId);
+    const getPreferenceForShow = (showId: string): PreferenceItem | undefined => {
+        return preferences.data?.find((item) => item.show_id === showId);
     };
 
     const toggleList = useMutation({
-        mutationFn: async (payload: { animeId: string; inList: boolean }) => {
+        mutationFn: async (payload: { showId: string; inList: boolean }) => {
             await api.post("/user/preferences/list", {
-                anime_id: payload.animeId,
+                show_id: payload.showId,
                 in_list: payload.inList
             });
         },
@@ -118,10 +118,10 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
 
 
     const series = useQuery({
-        queryKey: ["anime-series", id],
+        queryKey: ["show-series", id],
         enabled: !!id,
         queryFn: async () => {
-            const res = await api.get<{ items: AnimeSummaryCard[] }>(
+            const res = await api.get<{ items: ShowSummaryCard[] }>(
                 `/catalog/${id}/series`
             );
             return res.data.items;
@@ -155,10 +155,10 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
 
     const cleanSynopsis = data.synopsis?.replace(/\(Source:.*?\)/g, "").trim();
 
-    const handleToggleList = (animeId: string) => {
-        const current = getPreferenceForAnime(animeId);
+    const handleToggleList = (showId: string) => {
+        const current = getPreferenceForShow(showId);
         const nextInList = !current?.in_list;
-        toggleList.mutate({ animeId, inList: nextInList });
+        toggleList.mutate({ showId, inList: nextInList });
     };
 
 
@@ -169,7 +169,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
         return numA - numB;
     });
 
-    const progress = continueWatching.data?.find(item => item.anime_id === data?.id);
+    const progress = continueWatching.data?.find(item => item.show_id === data?.id);
     const hasProgress = !!progress?.episode;
 
     const resumeHref = (() => {
@@ -214,7 +214,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                                 onClick={() => handleToggleList(data.id)}
                                 className="flex h-9 w-9 md:h-11 md:w-11 items-center justify-center rounded-full border-2 border-neutral-400 text-white hover:border-white transition-colors bg-black/40"
                             >
-                                {getPreferenceForAnime(data.id)?.in_list ? (
+                                {getPreferenceForShow(data.id)?.in_list ? (
                                     <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="currentColor">
                                         <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
                                     </svg>
@@ -295,7 +295,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                             <select
                                 value={data.id}
                                 onChange={(e) => {
-                                    router.push(`/anime/${e.target.value}`, { scroll: false });
+                                    router.push(`/show/${e.target.value}`, { scroll: false });
                                 }}
                                 className="bg-neutral-800 text-white text-[0.65rem] md:text-xs font-black uppercase tracking-widest py-2 md:py-2.5 px-3 md:px-4 rounded border border-white/10 outline-none hover:bg-neutral-700 transition-colors cursor-pointer"
                             >
@@ -308,7 +308,7 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
 
                     <div className="flex flex-col gap-1">
                         {(showAllEpisodes ? sortedEpisodes : sortedEpisodes.slice(0, 10)).map((ep, idx) => {
-                            const epProgress = animeProgress.data?.find(p => p.episode === ep.number);
+                            const epProgress = showProgress.data?.find(p => p.episode === ep.number);
                             const progressPercent = epProgress ? Math.min(Math.max(epProgress.progress * 100, 0), 100) : 0;
 
                             return (
@@ -393,12 +393,12 @@ export function AnimeDetailView({ id, initialData }: AnimeDetailViewProps) {
                     <section className="space-y-4 md:space-y-6">
                         <h2 className="text-xl md:text-2xl font-black text-white">More Like This</h2>
                         <div className="grid grid-cols-3 sm:grid-cols-3 gap-x-2 gap-y-4 md:gap-4">
-                            {moreLikeThis.items.filter(item => item.id !== data.id).slice(0, 6).map(anime => (
-                                <AnimeCard
-                                    key={anime.id}
-                                    anime={anime}
-                                    isInList={getPreferenceForAnime(anime.id)?.in_list ?? false}
-                                    onToggleList={() => handleToggleList(anime.id)}
+                            {moreLikeThis.items.filter(item => item.id !== data.id).slice(0, 6).map((card) => (
+                                <ShowCard
+                                    key={card.id}
+                                    show={card}
+                                    isInList={getPreferenceForShow(card.id)?.in_list ?? false}
+                                    onToggleList={() => handleToggleList(card.id)}
                                     widthClassName="w-full"
                                     variant="simple"
                                 />

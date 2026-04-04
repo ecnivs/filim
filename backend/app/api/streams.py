@@ -19,7 +19,7 @@ def _resolve_language_and_mode(
 ) -> tuple[str, str]:
     """Map legacy `mode` and explicit `language` into a concrete pair.
 
-    The external AllAnime API still exposes `translationType` as \"sub\"/\"dub\",
+    The upstream GraphQL API still exposes `translationType` as \"sub\"/\"dub\",
     but for the UI we want stable language codes like \"ja\"/\"en\". When a
     `language` query param is provided, it wins; otherwise we derive a
     reasonable default from the requested `mode`.
@@ -34,9 +34,9 @@ def _resolve_language_and_mode(
     return resolved_language, effective_mode
 
 
-@router.get("/{anime_id}/episodes/{episode}/stream")
+@router.get("/{show_id}/episodes/{episode}/stream")
 async def get_episode_stream(
-    anime_id: str,
+    show_id: str,
     episode: str,
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     language: Optional[str] = Query(None, pattern="^(ja|en)$"),
@@ -57,7 +57,7 @@ async def get_episode_stream(
 
     try:
         manifest_url, variants = await service.get_hls_manifest_for_episode(
-            anime_id=anime_id,
+            show_id=show_id,
             episode=episode,
             mode=effective_mode,
             preferred_quality=quality,
