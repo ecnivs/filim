@@ -52,7 +52,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
             };
         }
         return null;
-    }, [params.showId, params.episode]);
+    }, [params]);
 
     const routeKey = routeIds ? `${routeIds.showId}/${routeIds.episode}` : null;
 
@@ -201,7 +201,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                         `/catalog/${routeIds.showId}/series`
                     );
                     if (cancelled) return;
-                    setSeasons(prev => {
+                    setSeasons(() => {
                         const newList = [...seriesRes.data.items];
                         if (!newList.find(s => s.id === res.data.id)) {
                             newList.unshift({ id: res.data.id, title: res.data.title });

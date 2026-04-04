@@ -44,7 +44,7 @@ export function ContinueCard({
     return (
         <>
             <div
-                className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 hover:z-50 cursor-pointer select-none hidden md:block`}
+                className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 hover:z-50 cursor-pointer hidden md:block`}
                 onClick={handleCardClick}
             >
                 <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out group-hover/card:scale-[1.25] group-hover/card:z-30 group-hover/card:delay-[100ms]">
@@ -162,7 +162,7 @@ export function ContinueCard({
             </div>
 
             <div
-                className={`relative flex-shrink-0 ${widthClassName} cursor-pointer select-none md:hidden active:scale-[0.97] transition-transform duration-150`}
+                className={`relative flex-shrink-0 ${widthClassName} cursor-pointer md:hidden active:scale-[0.97] transition-transform duration-150`}
                 onClick={handleCardClick}
             >
                 <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface">

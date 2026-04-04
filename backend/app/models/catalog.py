@@ -1,5 +1,7 @@
 from datetime import date
+
 from sqlalchemy import (
+    JSON,
     Boolean,
     Date,
     Float,
@@ -8,9 +10,9 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    JSON,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.models.base import Base
 
 

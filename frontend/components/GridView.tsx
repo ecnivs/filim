@@ -77,7 +77,6 @@ export function GridView({
                         ))}
                     </div>
 
-                    {/* Infinite Scroll Trigger & Footer UI */}
                     <div ref={ref} className="min-h-[80px] flex items-center justify-center w-full mt-8">
                         {isFetchingNextPage ? (
                             <div className="flex flex-col items-center gap-2 py-4">

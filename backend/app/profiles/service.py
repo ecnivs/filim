@@ -1,10 +1,13 @@
 from __future__ import annotations
+
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import hashlib
+
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models import Profile
 
 

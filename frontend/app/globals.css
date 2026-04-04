@@ -50,6 +50,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 @media (max-width: 767px) {
@@ -259,5 +269,12 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 639px) {
   .mobile-tap-zone:active {
     background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+  }
+}
+
+@layer utilities {
+  .select-text {
+    user-select: text;
+    -webkit-user-select: text;
   }
 }

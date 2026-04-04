@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.session import get_db
 from app.profiles import ProfileModel, ProfileService
 

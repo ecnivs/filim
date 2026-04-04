@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 import { useProfile } from "@/lib/profile-context";
@@ -29,8 +28,7 @@ const AVATAR_COLORS = [
 ];
 
 export default function ProfilesPage() {
-    const router = useRouter();
-    const { profile, setProfile } = useProfile();
+    const { setProfile } = useProfile();
     const queryClient = useQueryClient();
     const [isCreating, setIsCreating] = useState(false);
     const [createName, setCreateName] = useState("");
@@ -181,10 +179,12 @@ export default function ProfilesPage() {
                                 <input
                                     type="password"
                                     inputMode="numeric"
-                                    maxLength={6}
+                                    maxLength={4}
                                     value={createPin}
                                     onChange={(e) =>
-                                        setCreatePin(e.target.value.replace(/\\D/g, ""))
+                                        setCreatePin(
+                                            e.target.value.replace(/\D/g, "").slice(0, 4)
+                                        )
                                     }
                                     className="dialog-input"
                                     placeholder="••••"
@@ -238,12 +238,33 @@ export default function ProfilesPage() {
                                     pattern="[0-9]*"
                                     maxLength={4}
                                     value={pinInput}
-                                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
+                                    onChange={(e) => {
+                                        const next = e.target.value.replace(/\D/g, "").slice(0, 4);
+                                        setPinInput(next);
+                                        if (
+                                            next.length === 4 &&
+                                            unlockingProfile &&
+                                            !verifyPin.isPending
+                                        ) {
+                                            verifyPin.mutate({
+                                                profile: unlockingProfile,
+                                                pin: next
+                                            });
+                                        }
+                                    }}
                                     className="dialog-input-emphasis"
                                     autoFocus
                                     onKeyDown={(e) => {
-                                        if (e.key === "Enter" && pinInput.length >= 4) {
-                                            verifyPin.mutate({ profile: unlockingProfile, pin: pinInput });
+                                        if (
+                                            e.key === "Enter" &&
+                                            pinInput.length >= 4 &&
+                                            unlockingProfile &&
+                                            !verifyPin.isPending
+                                        ) {
+                                            verifyPin.mutate({
+                                                profile: unlockingProfile,
+                                                pin: pinInput
+                                            });
                                         }
                                     }}
                                 />

@@ -11,14 +11,12 @@
     "dependencies": {
         "@headlessui/react": "^2.2.9",
         "@tanstack/react-query": "^5.32.0",
-        "clsx": "^2.1.0",
         "hls.js": "^1.5.15",
         "lucide-react": "^0.577.0",
         "next": "14.2.3",
         "react": "18.3.1",
         "react-dom": "18.3.1",
-        "react-intersection-observer": "^10.0.3",
-        "zustand": "^4.5.0"
+        "react-intersection-observer": "^10.0.3"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",

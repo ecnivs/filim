@@ -1,9 +1,11 @@
+import logging
 import time
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.core.logger import setup_logging
-import logging
 
 
 def create_app() -> FastAPI:

@@ -1,8 +1,11 @@
 from __future__ import annotations
+
+import asyncio
 from dataclasses import dataclass
 from typing import Optional
-import asyncio
+
 import httpx
+
 from app.core.config import settings
 from app.sources import StreamCandidateModel
 

@@ -8,7 +8,7 @@ import { ShowCard, type ShowSummaryCard as ShowSummary } from "@/components/Show
 import { SectionRow } from "@/components/SectionRow";
 import { useSearchParams } from "next/navigation";
 import { ContinueCard } from "@/components/ContinueCard";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useInView } from "react-intersection-observer";
 import { usePreferences } from "@/hooks/usePreferences";
 import { useProfile } from "@/lib/profile-context";
@@ -27,6 +27,11 @@ type RecommendationSection = {
     id: string;
     title: string;
     items: ShowSummary[];
+};
+
+type DiscoveryPage = {
+    sections: RecommendationSection[];
+    next_cursor: number | null;
 };
 
 import { GridView } from "@/components/GridView";
@@ -63,20 +68,31 @@ export default function HomePage() {
 
     const discovery = useInfiniteQuery({
         queryKey: ["discovery"],
-        queryFn: async ({ pageParam = 1 }) => {
-            const res = await api.get<{ sections: RecommendationSection[] }>(
+        queryFn: async ({ pageParam = 0 }) => {
+            const res = await api.get<DiscoveryPage>(
                 "/user/recommendations/discovery",
-                { params: { page: pageParam, limit: 3 } }
+                { params: { cursor: pageParam, limit: 3 } }
             );
-            return res.data.sections;
+            return res.data;
         },
         getNextPageParam: (lastPage, allPages) => {
             if (allPages.length >= 50) return undefined;
-            if (!lastPage || lastPage.length === 0) return undefined;
-            return allPages.length + 1;
+            if (lastPage.next_cursor == null) return undefined;
+            return lastPage.next_cursor;
         },
-        initialPageParam: 1,
+        initialPageParam: 0,
     });
+
+    const discoverySections = useMemo(() => {
+        const flat = discovery.data?.pages.flatMap((p) => p.sections) ?? [];
+        const seen = new Set<string>();
+        return flat.filter((s) => {
+            const k = s.title.trim().toLowerCase();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+    }, [discovery.data?.pages]);
 
     const { ref, inView } = useInView({
         threshold: 0,
@@ -94,14 +110,7 @@ export default function HomePage() {
             return;
         }
         void discovery.fetchNextPage();
-    }, [
-        inView,
-        discovery.data,
-        discovery.isLoading,
-        discovery.hasNextPage,
-        discovery.isFetchingNextPage,
-        discovery.fetchNextPage
-    ]);
+    }, [inView, discovery]);
 
     const searchResults = useInfiniteQuery({
         queryKey: ["search", urlQuery, urlGenres],
@@ -255,24 +264,19 @@ export default function HomePage() {
                         ))}
 
 
+                        {discoverySections.map((section) => (
+                            <SectionRow key={section.id} title={section.title}>
+                                {section.items.map((row) => (
+                                    <ShowCard
+                                        key={row.id}
+                                        show={row}
+                                        isInList={isInList(row.id)}
+                                        onToggleList={() => handleToggleList(row.id)}
+                                    />
+                                ))}
+                            </SectionRow>
+                        ))}
 
-                        {/* Infinite Discovery Rows */}
-                        {discovery.data?.pages.map((page) =>
-                            page.map((section) => (
-                                <SectionRow key={section.id} title={section.title}>
-                                    {section.items.map((row) => (
-                                        <ShowCard
-                                            key={row.id}
-                                            show={row}
-                                            isInList={isInList(row.id)}
-                                            onToggleList={() => handleToggleList(row.id)}
-                                        />
-                                    ))}
-                                </SectionRow>
-                            ))
-                        )}
-
-                        {/* Intersection Observer Trigger & Completion Message */}
                         <div ref={ref} className="min-h-[100px] flex items-center justify-center w-full">
                             {discovery.isFetchingNextPage ? (
                                 <div className="flex flex-col items-center gap-2 py-8">
@@ -283,7 +287,7 @@ export default function HomePage() {
                                     </div>
                                     <p className="text-[10px] font-bold text-ncyan/50 uppercase tracking-[0.2em] mt-2">Discovering</p>
                                 </div>
-                            ) : !discovery.hasNextPage && discovery.data && discovery.data.pages.flat().length > 0 ? (
+                            ) : !discovery.hasNextPage && discovery.data && discoverySections.length > 0 ? (
                                 <div className="py-12 text-center animate-fade-in w-full max-w-2xl mx-auto px-4">
                                     <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-800 to-transparent mb-8" />
                                     <div className="space-y-3">

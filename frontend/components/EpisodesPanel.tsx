@@ -45,21 +45,17 @@ export function EpisodesPanel({
         }
     }, [isOpen, currentEpisode]);
 
-    // Filter seasons to only include actual seasons (e.g. "Season", "S1", "Part")
-    // and exclude unrelated series titles.
     const filteredSeasons = seasons.filter(s =>
         /season|s\d+|part|cour/i.test(s.title) ||
         s.id === showId
     );
 
-    // Find the current season title
     const currentSeason = filteredSeasons.find((s) => s.id === showId) || filteredSeasons[0];
 
     const episodeList = (isMobile: boolean) => (
         <>
             {mode === "episodes" ? (
                 <div className={`flex flex-col min-h-0 ${isMobile ? "flex-1" : ""}`}>
-                    {/* Header for Episodes Mode */}
                     <div className={`flex items-center gap-4 border-b border-white/5 ${isMobile ? "px-4 py-4" : "px-6 py-5"}`}>
                         {filteredSeasons.length > 1 ? (
                             <button
@@ -79,7 +75,6 @@ export function EpisodesPanel({
                         )}
                     </div>
 
-                    {/* Episode List */}
                     <div className={`flex-1 overflow-y-auto px-2 ${isMobile ? "py-2" : "py-3"} space-y-0.5 custom-scrollbar`}>
                         {initialEpisodes.map((ep) => {
                             const isCurrent = ep.number === currentEpisode;
@@ -116,6 +111,7 @@ export function EpisodesPanel({
                                             <div className="mt-2 ml-8 space-y-2 animate-fade-in">
                                                 {ep.thumbnail_url && (
                                                     <div className="relative aspect-video w-full rounded bg-white/5 overflow-hidden">
+                                                        {/* eslint-disable-next-line @next/next/no-img-element -- remote episode thumbs; domains not configured for next/image */}
                                                         <img
                                                             src={ep.thumbnail_url}
                                                             alt={ep.title || ""}
@@ -146,14 +142,12 @@ export function EpisodesPanel({
                 </div>
             ) : (
                 <div className={`flex flex-col min-h-0 ${isMobile ? "flex-1" : ""}`}>
-                    {/* Header for Seasons Mode */}
                     <div className={`border-b border-white/5 ${isMobile ? "px-4 py-4" : "px-6 py-6"} bg-white/5`}>
                         <h2 className="text-sm font-black text-neutral-500 uppercase tracking-[0.2em]">
                             {showTitle}
                         </h2>
                     </div>
 
-                    {/* Season List */}
                     <div className="flex-1 overflow-y-auto py-1 custom-scrollbar">
                         {filteredSeasons.map((s) => {
                             const isActive = s.id === showId;
@@ -195,7 +189,6 @@ export function EpisodesPanel({
 
     return (
         <>
-            {/* Desktop popover */}
             <Transition
                 show={isOpen}
                 as={Fragment}
@@ -214,7 +207,6 @@ export function EpisodesPanel({
                 </div>
             </Transition>
 
-            {/* Mobile bottom sheet */}
             <Transition
                 show={isOpen}
                 as={Fragment}
@@ -227,7 +219,6 @@ export function EpisodesPanel({
             >
                 <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onClose(); }}>
                     <div className="player-menu-scrim" />
-                    {/* SHEET_MAX_EPISODES: tall list + optional thumbnails */}
                     <div
                         className="player-menu-sheet max-h-[75vh] min-h-0 overflow-hidden"
                         onClick={(e) => e.stopPropagation()}

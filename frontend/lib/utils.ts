@@ -1,4 +1,5 @@
 export function formatTime(totalSeconds: number): string {
+    if (!Number.isFinite(totalSeconds)) return "0:00";
     const seconds = Math.max(0, Math.floor(totalSeconds));
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);

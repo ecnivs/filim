@@ -151,7 +151,7 @@ async def _init_db(db_engine: AsyncEngine) -> None:
         except Exception:
             await db.rollback()
 
-        stmt = select(Profile).where(Profile.is_guest == True)
+        stmt = select(Profile).where(Profile.is_guest.is_(True))
         result = await db.execute(stmt)
         guest = result.scalar_one_or_none()
 

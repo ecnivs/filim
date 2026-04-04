@@ -1,21 +1,24 @@
 from __future__ import annotations
+
+import html
+import json
+import logging
+import re
 from dataclasses import dataclass
 from typing import Any, List, Optional
-import json
-import re
-import html
-import logging
+
 import httpx
 from pydantic import BaseModel
-from app.core.config import settings
+
 from app.core.cache import cache_response
+from app.core.config import settings
 from app.core.constants import DEFAULT_USER_AGENT, MODE_SUB, genres_for_upstream_api
 from app.core.utils import normalize_genre_list
 from app.sources.queries import (
-    SEARCH_SHOWS_QUERY,
-    SHOW_DETAILS_QUERY,
     EPISODE_LIST_QUERY,
     EPISODE_METADATA_QUERY,
+    SEARCH_SHOWS_QUERY,
+    SHOW_DETAILS_QUERY,
 )
 
 

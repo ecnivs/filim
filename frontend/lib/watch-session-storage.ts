@@ -1,6 +1,6 @@
 /** sessionStorage keys for resume / play state across hard refresh (Ctrl+R). */
 
-export function sessionResumeKey(showId: string, episodeKey: string): string {
+function sessionResumeKey(showId: string, episodeKey: string): string {
     return `filim.resume.${encodeURIComponent(showId)}.${encodeURIComponent(episodeKey)}`;
 }
 
@@ -8,7 +8,7 @@ export function sessionPlayingKey(showId: string, episodeKey: string): string {
     return `filim.playing.${encodeURIComponent(showId)}.${encodeURIComponent(episodeKey)}`;
 }
 
-export type SessionPlayIntent = {
+type SessionPlayIntent = {
     resumePlay: boolean;
     /** `video.muted` before navigation — used to restore after muted autoplay unlock. */
     videoMuted: boolean;
@@ -58,7 +58,7 @@ export function readSessionPlayIntent(
     }
 }
 
-export type SessionResumePayload = {
+type SessionResumePayload = {
     position_seconds: number;
     duration_seconds?: number;
 };

@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ShowCard, type ShowSummaryCard } from "./ShowCard";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useProfile } from "@/lib/profile-context";
 
 type Episode = {
@@ -33,6 +33,21 @@ type PreferenceItem = {
 interface ShowDetailViewProps {
     id: string;
     initialData?: ShowDetails;
+}
+
+function MoreLikeThisDiscovering() {
+    return (
+        <div className="flex min-h-[120px] w-full flex-col items-center justify-center gap-2 py-10">
+            <div className="flex gap-1.5">
+                <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce" />
+            </div>
+            <p className="text-[10px] font-bold text-ncyan/50 uppercase tracking-[0.2em] mt-2">
+                Discovering
+            </p>
+        </div>
+    );
 }
 
 export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
@@ -63,6 +78,155 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
             return res.data.items;
         }
     });
+
+    const relatedFromSimilar = useMemo(
+        () =>
+            (similar.data ?? []).filter(
+                (item) => item.id && item.id !== id
+            ),
+        [similar.data, id]
+    );
+
+    const genreTags = useMemo(() => {
+        const raw = data?.tags ?? [];
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const t of raw) {
+            const s = t.trim();
+            if (!s || seen.has(s.toLowerCase())) continue;
+            seen.add(s.toLowerCase());
+            out.push(s);
+        }
+        return out;
+    }, [data?.tags]);
+
+    const genreTagsKey = genreTags.join("|");
+
+    const genreFallback = useQuery({
+        queryKey: ["show-genre-fallback", id, genreTagsKey],
+        enabled:
+            !!id &&
+            !!data &&
+            genreTags.length > 0 &&
+            similar.isSuccess &&
+            relatedFromSimilar.length === 0,
+        queryFn: async () => {
+            const seen = new Set<string>();
+            if (id) seen.add(id);
+            const out: ShowSummaryCard[] = [];
+
+            const pushBatch = (items: ShowSummaryCard[]) => {
+                for (const item of items) {
+                    if (!item.id || seen.has(item.id)) continue;
+                    seen.add(item.id);
+                    out.push(item);
+                    if (out.length >= 18) return;
+                }
+            };
+
+            try {
+                const combined = await api.get<{ items: ShowSummaryCard[] }>(
+                    "/catalog/search",
+                    {
+                        params: {
+                            q: "",
+                            genres: genreTags.join(","),
+                            mode: "sub",
+                            page: 1
+                        }
+                    }
+                );
+                pushBatch(combined.data.items);
+            } catch {
+                /* ignore */
+            }
+
+            for (const tag of genreTags) {
+                if (out.length >= 18) break;
+                try {
+                    const res = await api.get<{ items: ShowSummaryCard[] }>(
+                        "/catalog/search",
+                        {
+                            params: {
+                                q: "",
+                                genres: tag,
+                                mode: "sub",
+                                page: 1
+                            }
+                        }
+                    );
+                    pushBatch(res.data.items);
+                } catch {
+                    /* ignore */
+                }
+            }
+
+            for (const tag of genreTags) {
+                if (out.length >= 18) break;
+                try {
+                    const res = await api.get<{ items: ShowSummaryCard[] }>(
+                        "/catalog/search",
+                        {
+                            params: { q: tag, mode: "sub", page: 1 }
+                        }
+                    );
+                    pushBatch(res.data.items);
+                } catch {
+                    /* ignore */
+                }
+            }
+
+            return out;
+        }
+    });
+
+    const trendingFallback = useQuery({
+        queryKey: ["show-more-trending", id],
+        enabled:
+            !!id &&
+            !!data &&
+            similar.isSuccess &&
+            relatedFromSimilar.length === 0 &&
+            genreTags.length === 0,
+        queryFn: async () => {
+            const res = await api.get<{ items: ShowSummaryCard[] }>(
+                "/catalog/trending",
+                { params: { page: 1 } }
+            );
+            return res.data.items;
+        }
+    });
+
+    const moreLikeThisItems = useMemo(() => {
+        if (relatedFromSimilar.length > 0) {
+            return relatedFromSimilar.slice(0, 6);
+        }
+        const fromGenre = (genreFallback.data ?? []).filter(
+            (item) => item.id && item.id !== id
+        );
+        if (fromGenre.length > 0) {
+            return fromGenre.slice(0, 6);
+        }
+        return (trendingFallback.data ?? [])
+            .filter((item) => item.id && item.id !== id)
+            .slice(0, 6);
+    }, [
+        relatedFromSimilar,
+        genreFallback.data,
+        trendingFallback.data,
+        id
+    ]);
+
+    const moreLikeThisLoading =
+        similar.isPending ||
+        (similar.isSuccess &&
+            relatedFromSimilar.length === 0 &&
+            genreTags.length > 0 &&
+            genreFallback.isPending) ||
+        (similar.isSuccess &&
+            relatedFromSimilar.length === 0 &&
+            genreTags.length === 0 &&
+            trendingFallback.isPending);
 
     const preferences = useQuery({
         queryKey: ["preferences"],
@@ -174,7 +338,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
 
     return (
         <div className="w-full bg-background flex flex-col rounded-xl overflow-hidden">
-            {/* Banner Section */}
             <section className="relative aspect-[16/9] md:aspect-video w-full overflow-hidden">
                 {data.cover_image_url && (
                     <Image
@@ -221,7 +384,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                 </div>
             </section>
 
-            {/* Content Section */}
             <div className="p-4 md:p-8 space-y-8 md:space-y-12">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
                     <div className="md:col-span-2 space-y-4 md:space-y-6">
@@ -275,7 +437,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                     </div>
                 </div>
 
-                {/* Episodes Section */}
                 <section className="space-y-4 md:space-y-6">
                     <div className="flex items-center justify-between">
                         <div className="flex flex-col gap-1">
@@ -313,7 +474,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                         {idx + 1}
                                     </span>
 
-                                    {/* Thumbnail — hidden on very small screens */}
                                     <div className="relative aspect-video w-28 sm:w-36 md:w-48 overflow-hidden rounded bg-neutral-800 flex-shrink-0 hidden sm:block">
                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 z-10">
                                             <svg viewBox="0 0 24 24" className="w-8 md:w-10 h-8 md:h-10 text-white" fill="currentColor">
@@ -344,7 +504,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                             <h3 className="text-sm md:text-base font-bold text-white truncate">
                                                 {ep.title || `Episode ${ep.number}`}
                                             </h3>
-                                            {/* Mobile play indicator */}
                                             <svg viewBox="0 0 24 24" className="w-4 h-4 text-neutral-500 shrink-0 sm:hidden" fill="currentColor">
                                                 <path d="M6 4l15 8-15 8V4z" />
                                             </svg>
@@ -352,7 +511,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                         <p className="text-xs md:text-sm text-neutral-400 line-clamp-1 md:line-clamp-2 leading-relaxed hidden sm:block">
                                             Watch the latest episode of {data.title}. Continuous high-quality streaming experience.
                                         </p>
-                                        {/* Mobile progress bar */}
                                         {progressPercent > 0 && (
                                             <div className="mt-2 h-1 w-full bg-neutral-600/50 rounded overflow-hidden sm:hidden">
                                                 <div
@@ -380,24 +538,46 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                     )}
                 </section>
 
-                {/* More Like This */}
-                {similar.data && similar.data.filter(item => item.id !== data.id).length > 0 && (
-                    <section className="space-y-4 md:space-y-6">
-                        <h2 className="text-xl md:text-2xl font-black text-white">More Like This</h2>
+                <section className="space-y-4 md:space-y-6">
+                    <div className="space-y-1">
+                        <h2 className="text-xl md:text-2xl font-black text-white">
+                            More Like This
+                        </h2>
+                        {!moreLikeThisLoading &&
+                            moreLikeThisItems.length > 0 &&
+                            relatedFromSimilar.length === 0 && (
+                                <p className="text-xs md:text-sm text-neutral-500 font-medium">
+                                    {genreTags.length > 0
+                                        ? `Based on genres: ${genreTags.slice(0, 8).join(", ")}${genreTags.length > 8 ? "…" : ""}`
+                                        : "Popular right now"}
+                                </p>
+                            )}
+                    </div>
+                    {moreLikeThisLoading ? (
+                        <MoreLikeThisDiscovering />
+                    ) : moreLikeThisItems.length > 0 ? (
                         <div className="grid grid-cols-3 sm:grid-cols-3 gap-x-2 gap-y-4 md:gap-4">
-                            {similar.data.filter(item => item.id !== data.id).slice(0, 6).map((card) => (
+                            {moreLikeThisItems.map((card) => (
                                 <ShowCard
                                     key={card.id}
                                     show={card}
-                                    isInList={getPreferenceForShow(card.id)?.in_list ?? false}
+                                    isInList={
+                                        getPreferenceForShow(card.id)?.in_list ?? false
+                                    }
                                     onToggleList={() => handleToggleList(card.id)}
                                     widthClassName="w-full"
                                     variant="simple"
                                 />
                             ))}
                         </div>
-                    </section>
-                )}
+                    ) : (
+                        <div className="flex min-h-[120px] items-center justify-center rounded-lg border border-white/5 bg-neutral-900/30 px-4 py-8">
+                            <p className="text-center text-sm text-neutral-500">
+                                No suggestions available yet.
+                            </p>
+                        </div>
+                    )}
+                </section>
             </div>
         </div>
     );

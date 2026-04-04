@@ -1,14 +1,15 @@
+import logging
 from collections.abc import AsyncGenerator
+
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy import event
-from app.core.config import settings
-import logging
 
+from app.core.config import settings
 
 connect_args = (
     {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}

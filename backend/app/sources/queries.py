@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 SEARCH_SHOWS_QUERY = """
-query( $search: SearchInput $limit: Int $page: Int 
-       $translationType: VaildTranslationTypeEnumType 
-       $countryOrigin: VaildCountryOriginEnumType ) { 
-  shows( search: $search limit: $limit page: $page 
-         translationType: $translationType countryOrigin: $countryOrigin ) { 
-    edges { 
-      _id name englishName altNames description genres thumbnail banner 
-      type availableEpisodesDetail __typename 
-    } 
+query( $search: SearchInput $limit: Int $page: Int
+       $translationType: VaildTranslationTypeEnumType
+       $countryOrigin: VaildCountryOriginEnumType ) {
+  shows( search: $search limit: $limit page: $page
+         translationType: $translationType countryOrigin: $countryOrigin ) {
+    edges {
+      _id name englishName altNames description genres thumbnail banner
+      type availableEpisodesDetail __typename
+    }
   }
 }
 """

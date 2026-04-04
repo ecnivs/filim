@@ -1,13 +1,16 @@
 from __future__ import annotations
-from dataclasses import dataclass
+
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List
+
 from pydantic import BaseModel
 from sqlalchemy import Select, and_, select
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models import Device, Show, WatchProgress
 
 logger = logging.getLogger(__name__)
@@ -152,6 +155,7 @@ class SessionService:
                 return False
 
         from sqlalchemy import func
+
         from app.models.profiles import Profile
 
         if profile_id and is_valid_uuid(profile_id):

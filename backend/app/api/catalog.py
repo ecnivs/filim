@@ -1,7 +1,9 @@
 from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.catalog import CatalogService
 from app.db.session import get_db
 from app.sources import EpisodeSummaryModel
@@ -78,14 +80,19 @@ def _get_catalog_service(db: AsyncSession = Depends(get_db)) -> CatalogService:
 
 @router.get("/search")
 async def search_catalog(
-    q: str = Query(..., min_length=1),
+    q: str = Query(""),
     page: int = Query(1, ge=1),
     genres: str | None = Query(None),
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     catalog: CatalogService = Depends(_get_catalog_service),
 ) -> dict[str, list[ShowSummaryResponse]]:
-    genre_list = [g.strip() for g in genres.split(",")] if genres else None
-    items = await catalog.search(query=q, mode=mode, page=page, genres=genre_list)
+    genre_list = [g.strip() for g in genres.split(",") if g.strip()] if genres else None
+    if not q.strip() and not genre_list:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a non-empty q and/or at least one genre",
+        )
+    items = await catalog.search(query=q.strip(), mode=mode, page=page, genres=genre_list)
     return {"items": [ShowSummaryResponse.from_source(i) for i in items]}
 
 

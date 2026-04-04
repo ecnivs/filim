@@ -53,7 +53,7 @@ export function SectionRow({
 
     return (
         <>
-            <section className={`relative -my-6 md:-my-10 group/row select-none transition-[z-index] duration-0 ${isOpen ? "z-50" : "z-40 hover:z-[60]"}`}>
+            <section className={`relative -my-6 md:-my-10 group/row transition-[z-index] duration-0 ${isOpen ? "z-50" : "z-40 hover:z-[60]"}`}>
                 <div className="flex items-center justify-between px-[4%] pb-2 md:pb-3 pt-5 md:pt-7 relative z-10">
                     <div className="flex items-center gap-2 md:gap-3">
                         <h2 className="text-[0.9rem] md:text-base lg:text-lg font-bold text-white leading-none">{title}</h2>
@@ -68,7 +68,6 @@ export function SectionRow({
                         )}
                     </div>
 
-                    {/* Fluid Scroll Indicator — desktop only */}
                     {(showLeft || showRight) && (
                         <div className="w-16 sm:w-24 h-[1.5px] bg-neutral-800 rounded-full relative overflow-hidden opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 mb-1 pointer-events-none hidden md:block">
                             <div
@@ -79,11 +78,9 @@ export function SectionRow({
                     )}
                 </div>
                 <div className="relative group/row">
-                    {/* Edge fade overlays — desktop only */}
                     {showLeft && <div className="row-fade-left" />}
                     {showRight && <div className="row-fade-right" />}
 
-                    {/* Carousel container */}
                     <div
                         ref={scrollRef}
                         onScroll={checkScroll}
@@ -92,7 +89,6 @@ export function SectionRow({
                         {children}
                     </div>
 
-                    {/* Scroll Buttons — desktop only */}
                     <button
                         onClick={() => scroll("left")}
                         className={`absolute left-0 top-0 bottom-0 z-40 hidden md:flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showLeft ? "group-hover/row:opacity-100" : "pointer-events-none"}`}

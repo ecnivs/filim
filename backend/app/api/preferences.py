@@ -4,14 +4,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.catalog import ShowSummaryResponse, _get_catalog_service
+from app.catalog import CatalogService
 from app.db.session import get_db
 from app.preferences import (
     AudioPreferenceModel,
     PreferenceModel,
     PreferencesService,
 )
-from app.api.catalog import _get_catalog_service, ShowSummaryResponse
-from app.catalog import CatalogService
 
 
 class PreferenceItem(BaseModel):

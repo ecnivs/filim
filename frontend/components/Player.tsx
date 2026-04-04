@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useCallback, Fragment, ReactNode } from "react";
+import { useEffect, useRef, useState, Fragment, ReactNode } from "react";
 import Hls from "hls.js";
-import { Listbox, Transition } from "@headlessui/react";
+import { Transition } from "@headlessui/react";
 import {
     ArrowLeft,
     Play,
@@ -16,12 +16,10 @@ import {
     Minimize,
     Settings,
     MessageSquare,
-    Monitor,
     Check,
     Layers,
     SkipForward,
-    Gauge,
-    ChevronDown
+    Gauge
 } from "lucide-react";
 import { EpisodesPanel } from "./EpisodesPanel";
 import {
@@ -29,6 +27,7 @@ import {
     sessionPlayingKey,
     writeSessionPlayIntent
 } from "@/lib/watch-session-storage";
+import { formatTime } from "@/lib/utils";
 
 type PlayerSource = {
     url: string;
@@ -151,10 +150,6 @@ export function Player({
         { id: number; name: string }[]
     >([]);
     const [currentSubtitleId, setCurrentSubtitleId] = useState<number | null>(null);
-    const [audioTracks, setAudioTracks] = useState<{ id: number; name: string }[]>(
-        []
-    );
-    const [currentAudioId, setCurrentAudioId] = useState<number | null>(null);
     const [hasEnded, setHasEnded] = useState(false);
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
     const [hlsQualityOptions, setHlsQualityOptions] = useState<QualityOption[]>([]);
@@ -240,8 +235,6 @@ export function Player({
         const isEpisodeSwitch = lastEpisodeLabelRef.current !== episodeLabel;
 
         if (!source || !source.url) {
-            // Waiting for a manifest (new episode or first load). Quality/audio use in-player HLS
-            // switching and do not tear down the stream.
             setHlsQualityOptions([]);
             setHlsQualityValue("auto");
             video.removeAttribute("src");
@@ -313,7 +306,6 @@ export function Player({
             });
 
             hls.on(Hls.Events.MANIFEST_PARSED, (_event, _data) => {
-                // Apply resume position here — HLS is guaranteed to be ready to seek
                 applyResumeTime();
                 rebuildHlsQualityMenu();
             });
@@ -362,22 +354,14 @@ export function Player({
             });
 
             hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_event, data: any) => {
-                const tracks = (data.audioTracks || []).map(
-                    (track: any, index: number) => ({
-                        id: index,
-                        name: track.name || track.lang || `Track ${index + 1}`
-                    })
-                );
-                setAudioTracks(tracks);
+                const tracks = data.audioTracks || [];
                 if (tracks.length === 0) {
-                    setCurrentAudioId(null);
                     return;
                 }
 
-
                 const code = resolveAudioPreferenceCode(audioLanguages, selectedAudioLanguageId);
                 if (code) {
-                    const matchByCode = (data.audioTracks || []).findIndex((track: any) => {
+                    const matchByCode = tracks.findIndex((track: any) => {
                         const lang = track.lang as string | undefined;
                         return (
                             track.lang === code ||
@@ -388,16 +372,12 @@ export function Player({
                     if (matchByCode >= 0) {
                         const anyHls = hls as any;
                         anyHls.audioTrack = matchByCode;
-                        setCurrentAudioId(matchByCode);
                         return;
                     }
                 }
 
-                setCurrentAudioId(0);
-            });
-
-            hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_event, data: any) => {
-                setCurrentAudioId(typeof data.id === "number" ? data.id : null);
+                const anyHls = hls as any;
+                anyHls.audioTrack = 0;
             });
         } else {
             video.src = source.url;
@@ -556,6 +536,7 @@ export function Player({
                 hlsRef.current = null;
             }
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- full HLS teardown/rebuild only on stream URL change; other props handled by separate effects
     }, [source?.url]);
 
     useEffect(() => {
@@ -867,7 +848,7 @@ export function Player({
                 el.style.cursor = "default";
             }
         };
-    }, [isPlaying, activeMenu]);
+    }, [isPlaying, activeMenu, isBuffering]);
 
     const exitingFullscreenRef = useRef(false);
 
@@ -881,7 +862,6 @@ export function Player({
             // On mobile, when the system back button exits fullscreen,
             // the browser consumes the back event. We need to navigate back ourselves.
             if (!fsElement && isMobileDevice && !exitingFullscreenRef.current) {
-                // Save progress before leaving
                 if (durationRef.current > 0 && onProgressRef.current) {
                     onProgressRef.current({
                         positionSeconds: lastTimeRef.current,
@@ -889,7 +869,6 @@ export function Player({
                         isFinished: false
                     });
                 }
-                // Navigate back
                 if (onBack) {
                     onBack();
                 } else {
@@ -1125,38 +1104,6 @@ export function Player({
         }
     };
 
-    const togglePictureInPicture = async () => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        try {
-            if (document.pictureInPictureElement) {
-                await document.exitPictureInPicture();
-            } else if (document.pictureInPictureEnabled && !video.disablePictureInPicture) {
-                await video.requestPictureInPicture();
-            }
-        } catch (err) {
-            if (err instanceof Error) {
-                onError?.(err);
-            }
-        }
-    };
-
-    const formatTime = (seconds: number) => {
-        if (!Number.isFinite(seconds)) return "0:00";
-        const s = Math.floor(seconds);
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const sec = s % 60;
-        const padded = `${m.toString().padStart(1, "0")}:${sec.toString().padStart(2, "0")}`;
-        if (h > 0) {
-            return `${h.toString()}:${m.toString().padStart(2, "0")}:${sec
-                .toString()
-                .padStart(2, "0")}`;
-        }
-        return padded;
-    };
-
     const progressPercent = duration ? (currentTime / duration) * 100 : 0;
     const effectivePercent = isScrubbing ? scrubPercent : progressPercent;
 
@@ -1232,9 +1179,7 @@ export function Player({
                         void enforceMobileFullscreen();
                     }
 
-                    // Ignore clicks on control elements that should be handled natively
                     if ((e.target as HTMLElement).closest('button, a, input, [role="button"], .pointer-events-auto')) {
-                        // Let the controls handle their own clicks
                         return;
                     }
 
@@ -1243,7 +1188,6 @@ export function Player({
                     const width = rect.width;
 
                     if (clickTimeoutRef.current !== null) {
-                        // Double click registered
                         window.clearTimeout(clickTimeoutRef.current);
                         clickTimeoutRef.current = null;
 
@@ -1257,9 +1201,7 @@ export function Player({
                         return;
                     }
 
-                    // Single click initiated
                     if (Date.now() - lastWakeTimeRef.current < 500) {
-                        // UI just woke up from touchstart/mousemove; don't pause!
                         clickTimeoutRef.current = window.setTimeout(() => {
                             clickTimeoutRef.current = null;
                         }, 300);
@@ -1267,15 +1209,12 @@ export function Player({
                     }
 
                     if (!controlsVisible) {
-                        // Wake up UI immediately
                         setControlsVisible(true);
                         lastWakeTimeRef.current = Date.now();
-                        // Start timeout to catch potential double tap for seek while sleeping
                         clickTimeoutRef.current = window.setTimeout(() => {
                             clickTimeoutRef.current = null;
                         }, 300);
                     } else {
-                        // UI is awake. Wait 300ms to ensure it's not a double-tap before pausing
                         clickTimeoutRef.current = window.setTimeout(() => {
                             clickTimeoutRef.current = null;
                             togglePlay();
@@ -1290,7 +1229,6 @@ export function Player({
                     controls={false}
                 />
 
-                {/* Gradient overlays */}
                 <Transition
                     show={controlsVisible}
                     as={Fragment}
@@ -1307,7 +1245,6 @@ export function Player({
                     </div>
                 </Transition>
 
-                {/* Top metadata bar */}
                 <Transition
                     show={controlsVisible}
                     as={Fragment}
@@ -1387,7 +1324,6 @@ export function Player({
                     </div>
                 </Transition>
 
-                {/* Center play/pause indicator */}
                 <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
                     {!isPlaying &&
                         !isBuffering &&
@@ -1397,7 +1333,6 @@ export function Player({
                                 <Play className="h-7 w-7 sm:h-10 sm:w-10 text-white fill-white ml-1 sm:ml-2 drop-shadow-lg" />
                             </div>
                         )}
-                    {/* Spinner: stream refetch (episode / audio / quality), rebuffer, or first frame. */}
                     {showStreamReloadSpinner && (
                         <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center">
                             <svg
@@ -1425,7 +1360,6 @@ export function Player({
                     )}
                 </div>
 
-                {/* Skip intro */}
                 {showSkipIntro && !hasSkippedIntro && introEndSeconds && (
                     <div className="pointer-events-auto absolute bottom-20 right-4 sm:bottom-28 sm:right-6">
                         <button
@@ -1446,7 +1380,6 @@ export function Player({
                     </div>
                 )}
 
-                {/* Next episode overlay */}
                 {hasEnded && nextEpisodeHref && (
                     <div className="pointer-events-auto absolute inset-0 flex items-center justify-end px-6 pb-10">
                         <div className="max-w-xs rounded-lg bg-black/80 p-4 text-sm shadow-xl backdrop-blur">
@@ -1476,7 +1409,6 @@ export function Player({
                     </div>
                 )}
 
-                {/* Bottom controls */}
                 <Transition
                     show={controlsVisible}
                     as={Fragment}
@@ -1492,7 +1424,6 @@ export function Player({
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="space-y-3 sm:space-y-6">
-                            {/* Seek bar */}
                             <div className="group relative flex items-center py-2 h-8 sm:h-6">
                                 <div
                                     ref={seekBarRef}
@@ -1500,17 +1431,14 @@ export function Player({
                                     onClick={handleSeekBarClick}
                                     onMouseDown={handleSeekBarMouseDown}
                                 >
-                                    {/* Buffered Bar */}
                                     <div
                                         className="absolute h-full bg-white/20 transition-all duration-300 rounded-full"
                                         style={{ width: `${bufferedPercent}%` }}
                                     />
-                                    {/* Progress Bar */}
                                     <div
                                         className="absolute h-full bg-ncyan shadow-[0_0_10px_rgba(30,215,96,0.3)] rounded-full"
                                         style={{ width: `${effectivePercent}%` }}
                                     />
-                                    {/* Netflix-style scrub dot */}
                                     <div
                                         className="absolute top-1/2 -translate-y-1/2 h-4 w-4 sm:h-3.5 sm:w-3.5 rounded-full bg-ncyan opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-[0_0_6px_rgba(30,215,96,0.5)] pointer-events-none z-10"
                                         style={{ left: `${effectivePercent}%`, transform: `translate(-50%, -50%)` }}
@@ -1521,9 +1449,7 @@ export function Player({
                                 </div>
                             </div>
 
-                            {/* Main controls row */}
                             <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
-                                {/* Left controls: Play, Rewind, Forward, Volume */}
                                 <div className="flex items-center gap-2 sm:gap-4 sm:gap-6 justify-start">
                                     <button
                                         type="button"
@@ -1559,7 +1485,6 @@ export function Player({
                                         </button>
                                     </div>
 
-                                    {/* Volume cluster: reveal on hover — hidden on mobile */}
                                     <div className="hidden sm:flex group relative items-center gap-2">
                                         <button
                                             type="button"
@@ -1587,7 +1512,6 @@ export function Player({
                                     </div>
                                 </div>
 
-                                {/* Center: Metadata (Title + Episode Label) */}
                                 <div className="flex flex-col items-center justify-center text-center px-2 sm:px-4 overflow-hidden">
                                     <div className="flex flex-col items-center justify-center text-center gap-0.5 sm:gap-1">
                                         <span className="text-[8px] sm:text-[10px] sm:text-xs font-bold text-neutral-400 uppercase tracking-[0.15em] opacity-80 hidden sm:block">
@@ -1599,7 +1523,6 @@ export function Player({
                                     </div>
                                 </div>
 
-                                {/* Right controls: Next, Episodes, Audio/Subs, Speed, Fullscreen */}
                                 <div
                                     className="flex items-center gap-1.5 sm:gap-3 sm:gap-5 justify-end"
                                     onClick={(e) => e.stopPropagation()}
@@ -1685,14 +1608,12 @@ export function Player({
                                                     const hls = hlsRef.current;
 
                                                     if (subId >= 100 && video) {
-                                                        // Handle native text tracks
                                                         const nativeIdx = subId - 100;
                                                         for (let i = 0; i < video.textTracks.length; i++) {
                                                             video.textTracks[i].mode = i === nativeIdx ? "showing" : "disabled";
                                                         }
                                                         setCurrentSubtitleId(subId);
                                                     } else if (hls) {
-                                                        // Handle HLS tracks
                                                         (hls as any).subtitleTrack = subId;
                                                         setCurrentSubtitleId(subId);
                                                     }
@@ -1729,7 +1650,6 @@ export function Player({
                                         />
                                     </div>
 
-                                    {/* Hide the fullscreen button exclusively for mobile users, per Netflix UI */}
                                     {!isMobileDevice && (
                                         <button
                                             type="button"
@@ -1754,7 +1674,6 @@ export function Player({
     );
 }
 
-// Custom Menu Component
 function Menu({
     label,
     icon,
@@ -1820,7 +1739,6 @@ function Menu({
                 leaveFrom="opacity-100 scale-100 translate-y-0"
                 leaveTo="opacity-0 scale-95 translate-y-2"
             >
-                {/* Desktop popover */}
                 <div className={`hidden sm:block absolute ${placement === "top" ? "top-full" : "bottom-full"} right-0 ${placement === "top" ? "mt-4" : "mb-4"} w-48 max-h-[70vh] overflow-y-auto player-menu-popover p-2 z-50`}>
                     <div className="px-3 py-2 text-[0.65rem] font-black uppercase tracking-[0.2em] text-neutral-500 border-b border-white/5 mb-1">
                         {label}
@@ -1837,7 +1755,6 @@ function Menu({
                 </div>
             </Transition>
 
-            {/* Mobile bottom sheet */}
             <Transition
                 show={isOpen}
                 as={Fragment}
@@ -1850,7 +1767,6 @@ function Menu({
             >
                 <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onToggle(false); }}>
                     <div className="player-menu-scrim" />
-                    {/* SHEET_MAX_MENU: compact single-column picker */}
                     <div className="player-menu-sheet max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="player-menu-sheet-handle" />
                         <div className="px-2 py-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-500 mb-2">
@@ -1916,6 +1832,7 @@ function TwoColumnMenu({
         >
             <button
                 type="button"
+                aria-label={label}
                 onClick={(e) => {
                     e.stopPropagation();
                     onToggle(!isOpen);
@@ -1935,7 +1852,6 @@ function TwoColumnMenu({
                 leaveFrom="opacity-100 scale-100 translate-y-0"
                 leaveTo="opacity-0 scale-95 translate-y-2"
             >
-                {/* Desktop popover */}
                 <div className="hidden sm:flex absolute bottom-full right-0 mb-4 w-[480px] max-h-[75vh] overflow-hidden player-menu-popover z-50">
                     {sections.map((section, idx) => (
                         <div key={section.title} className={`flex-1 flex flex-col min-w-0 ${idx === 0 ? "border-r border-white/10" : ""}`}>
@@ -1971,7 +1887,6 @@ function TwoColumnMenu({
                 </div>
             </Transition>
 
-            {/* Mobile bottom sheet */}
             <Transition
                 show={isOpen}
                 as={Fragment}
@@ -1984,7 +1899,6 @@ function TwoColumnMenu({
             >
                 <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onToggle(false); }}>
                     <div className="player-menu-scrim" />
-                    {/* SHEET_MAX_AUDIO: two stacked sections */}
                     <div className="player-menu-sheet max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="player-menu-sheet-handle" />
                         {sections.map((section, idx) => (

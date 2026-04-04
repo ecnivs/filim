@@ -1,7 +1,7 @@
 from app.sources.allanime_catalog import (
     AllanimeCatalogAdapter,
-    ShowSummaryModel,
     EpisodeSummaryModel,
+    ShowSummaryModel,
     StreamCandidateModel,
 )
 

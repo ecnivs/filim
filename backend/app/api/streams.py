@@ -5,7 +5,6 @@ from fastapi import APIRouter, HTTPException, Query
 from app.models.streams import AudioLanguageModel, StreamResponseModel
 from app.streams.service import StreamService
 
-
 router = APIRouter()
 
 

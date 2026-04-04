@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Literal, Optional
+
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models import ProfileAudioPreference, ProfileListEntry, ProfileRating
 
 

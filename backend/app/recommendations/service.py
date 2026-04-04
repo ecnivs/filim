@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 from collections import Counter
 from typing import List
+
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import ProfileListEntry, Show, ShowStats
+
 from app.catalog.service import CatalogService
+from app.models import ProfileListEntry, Show, ShowStats
 from app.sources import ShowSummaryModel
 
 
@@ -184,8 +187,11 @@ class RecommendationService:
         return dynamic
 
     async def get_discovery_sections(
-        self, page: int = 1, limit: int = 3, profile_id: str | None = None
-    ) -> List[RecommendationSectionModel]:
+        self,
+        cursor: int = 0,
+        limit: int = 3,
+        profile_id: str | None = None,
+    ) -> tuple[list[RecommendationSectionModel], int | None]:
         exclude_genres = []
         try:
             for_you = await self.get_for_you_section(profile_id=profile_id)
@@ -205,19 +211,23 @@ class RecommendationService:
 
         genres = await self._get_dynamic_genres(exclude=exclude_genres)
 
+        if cursor >= len(genres) or not genres:
+            return [], None
+
         sections: list[RecommendationSectionModel] = []
         seen_ids: set[str] = set()
+        max_scan = limit * 5
+        i = cursor
+        attempts = 0
 
-        batch_size = limit * 5
-        start_idx = (page - 1) * limit
-        genre_pool = genres[start_idx : start_idx + batch_size]
-
-        if not genre_pool:
-            return []
-
-        for genre in genre_pool:
-            if len(sections) >= limit:
-                break
+        while (
+            len(sections) < limit
+            and i < len(genres)
+            and attempts < max_scan
+        ):
+            genre = genres[i]
+            i += 1
+            attempts += 1
 
             try:
                 filtered = await self.catalog.search(query="", genres=[genre], page=1)
@@ -233,9 +243,10 @@ class RecommendationService:
                         break
 
                 if final_items:
+                    slug = genre.lower().replace(" ", "_")
                     sections.append(
                         RecommendationSectionModel(
-                            id=f"genre_{genre.lower().replace(' ', '_')}_p{page}",
+                            id=f"genre_{slug}",
                             title=genre,
                             items=final_items,
                         )
@@ -243,7 +254,8 @@ class RecommendationService:
             except Exception:
                 continue
 
-        return sections
+        next_cursor: int | None = i if i < len(genres) else None
+        return sections, next_cursor
 
     async def get_device_recommendations(
         self,

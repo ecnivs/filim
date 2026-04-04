@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 from typing import Optional
+
 from pydantic import BaseModel
+
 from app.core.cache import cache_response
 from app.sources import AllanimeCatalogAdapter, StreamCandidateModel
 from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverError

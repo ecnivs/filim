@@ -1,17 +1,20 @@
 from __future__ import annotations
+
 import re
 from collections.abc import Sequence
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Show, ShowStats
-from app.sources import AllanimeCatalogAdapter, ShowSummaryModel, EpisodeSummaryModel
-from app.core.utils import normalize_title
+
 from app.core.constants import (
     COMMON_GENRES,
     MODE_SUB,
     RELATIONS_FOR_SIMILAR,
     SUPPORTED_RELATIONS,
 )
+from app.core.utils import normalize_title
+from app.models import Show, ShowStats
+from app.sources import AllanimeCatalogAdapter, EpisodeSummaryModel, ShowSummaryModel
 
 
 def _franchise_search_query(title: str | None, english_title: str | None) -> str | None:
@@ -316,19 +319,40 @@ class CatalogService:
                 return out
 
         tags = [t.strip() for t in (root.tags or []) if t and str(t).strip()]
-        for tag in tags[:3]:
+        max_tag_rounds = min(len(tags), 12)
+        for tag in tags[:max_tag_rounds]:
             if len(out) >= target:
                 break
-            try:
-                batch = await self.search(query="", genres=[tag], mode=mode, page=1)
-            except Exception:
-                continue
-            for item in batch:
-                if item.id and item.id not in seen:
-                    out.append(item)
-                    seen.add(item.id)
+            for page in (1, 2):
                 if len(out) >= target:
-                    return out
+                    break
+                try:
+                    batch = await self.search(
+                        query="", genres=[tag], mode=mode, page=page
+                    )
+                except Exception:
+                    continue
+                for item in batch:
+                    if item.id and item.id not in seen:
+                        out.append(item)
+                        seen.add(item.id)
+                    if len(out) >= target:
+                        return out
+
+        if len(out) < target and tags:
+            for tag in tags[:max_tag_rounds]:
+                if len(out) >= target:
+                    break
+                try:
+                    batch = await self.search(query=tag, mode=mode, page=1)
+                except Exception:
+                    continue
+                for item in batch:
+                    if item.id and item.id not in seen:
+                        out.append(item)
+                        seen.add(item.id)
+                    if len(out) >= target:
+                        return out
 
         q = _franchise_search_query(root.title, root.english_title)
         if q and len(out) < target:

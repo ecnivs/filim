@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ProfileProvider, useProfile } from "@/lib/profile-context";
-import { Suspense, useRef } from "react";
+import { useProfile } from "@/lib/profile-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 
@@ -20,7 +19,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { profile, isReady, logout, setProfile } = useProfile();
+    const { profile, isReady, logout } = useProfile();
     const [scrolled, setScrolled] = useState(false);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
@@ -50,6 +49,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                 setIsSearchExpanded(false);
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- adding searchQuery clears the field while typing before the debounced URL update
     }, [searchParams, pathname]);
 
     useEffect(() => {
@@ -65,7 +65,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [searchQuery, router]);
+    }, [searchQuery, router, searchParams]);
 
     useEffect(() => {
         if (isSearchExpanded) {
@@ -95,7 +95,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
     return (
         <div className="min-h-screen bg-background text-foreground">
             <header
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 select-none ${scrolled
+                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled
                     ? "bg-background/95 backdrop-blur-md shadow-[0_2px_20px_rgba(0,0,0,0.5)]"
                     : "bg-gradient-to-b from-black/80 via-black/40 to-transparent"
                     }`}
@@ -103,13 +103,13 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                 <div className="flex h-12 md:h-16 items-center justify-between px-[4%]">
                     <div className="flex items-center gap-4 md:gap-6">
                         {pathname === "/profiles" ? (
-                            <div className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none">
+                            <div className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none">
                                 Filim
                             </div>
                         ) : (
                             <Link
                                 href="/"
-                                className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none select-none"
+                                className="text-ncyan text-xl md:text-2xl font-black tracking-tighter uppercase p-0 m-0 leading-none"
                             >
                                 Filim
                             </Link>
@@ -125,7 +125,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                         <Link
                                             key={item.label}
                                             href={item.href}
-                                            className={`font-medium transition-colors select-none ${isActive
+                                            className={`font-medium transition-colors ${isActive
                                                 ? "text-white"
                                                 : "text-neutral-300 hover:text-white"
                                                 }`}
@@ -138,13 +138,12 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                         )}
                     </div>
                     <div className="flex items-center gap-3 md:gap-4">
-                        {/* Search — inline on desktop, full-width overlay on mobile */}
                         {pathname !== "/profiles" && (
                             <div className={`relative flex items-center transition-all duration-300 ${isSearchExpanded ? "md:w-64 w-[calc(100vw-7rem)]" : "w-8"}`}>
                                 <button
                                     type="button"
                                     onClick={toggleSearch}
-                                    className="text-white hover:text-neutral-300 transition-colors p-1 z-10 select-none"
+                                    className="text-white hover:text-neutral-300 transition-colors p-1 z-10"
                                     aria-label="Toggle search"
                                 >
                                     <svg
@@ -188,10 +187,8 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                     </div>
                                 </button>
 
-                                {/* Dropdown Menu */}
                                 <div className="absolute right-0 mt-2 w-56 origin-top-right rounded-lg bg-surface border border-neutral-800 shadow-[0_16px_60px_rgba(0,0,0,0.8)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[60] overflow-hidden">
                                     <div className="py-2">
-                                        {/* Other Profiles */}
                                         <div className="px-3 py-2 space-y-2">
                                             <p className="text-[10px] uppercase font-bold text-neutral-500 tracking-widest mb-1">Switch Profile</p>
                                             <ProfileDropdownItems currentId={profile?.id} />
@@ -212,7 +209,6 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                     </div>
                 </div>
             </header>
-            {/* Mobile Navigation - Scrollable Absolute Overlay (part of page content) */}
             {pathname !== "/profiles" && !searchParams.get("q") && (
                 <nav className="absolute top-0 left-0 right-0 z-40 flex md:hidden overflow-x-auto scrollbar-none items-center gap-3 pt-14 pb-2 px-[4%] transition-all duration-300">
                     <div className="flex items-center gap-2 flex-nowrap">
@@ -225,7 +221,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                 <Link
                                     key={item.label}
                                     href={item.href}
-                                    className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all select-none border whitespace-nowrap ${isActive
+                                    className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all border whitespace-nowrap ${isActive
                                         ? "bg-white text-black border-white"
                                         : "bg-black/20 text-white border-white/40 hover:bg-white/10"
                                         }`}
@@ -263,7 +259,6 @@ const AVATAR_COLORS = [
 
 function ProfileDropdownItems({ currentId }: { currentId?: string }) {
     const { setProfile } = useProfile();
-    const router = useRouter();
 
     const { data: profiles } = useQuery({
         queryKey: ["profiles"],

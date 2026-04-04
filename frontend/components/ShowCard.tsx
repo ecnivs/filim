@@ -21,7 +21,7 @@ export type ShowSummaryCard = {
     related_shows?: Array<{ relation: string; showId: string }>;
 };
 
-export type ShowCardProps = {
+type ShowCardProps = {
     show: ShowSummaryCard;
     href?: string;
     isInList?: boolean;
@@ -71,7 +71,7 @@ export function ShowCard({
 
     return (
         <div
-            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 ${variant === 'standard' ? 'md:group-hover/row-inner:opacity-30 md:hover:!opacity-100 md:hover:z-50' : ''} cursor-pointer select-none active:scale-[0.97] md:active:scale-100`}
+            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 ${variant === 'standard' ? 'md:group-hover/row-inner:opacity-30 md:hover:!opacity-100 md:hover:z-50' : ''} cursor-pointer active:scale-[0.97] md:active:scale-100`}
             onClick={handleCardClick}
             onMouseEnter={prefetchDetails}
         >

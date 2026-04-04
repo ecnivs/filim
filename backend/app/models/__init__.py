@@ -1,5 +1,5 @@
 from app.models.base import Base
-from app.models.catalog import Show, ShowStats, Episode
+from app.models.catalog import Episode, Show, ShowStats
 from app.models.devices import Device, WatchProgress
 from app.models.preferences import (
     ProfileAudioPreference,
