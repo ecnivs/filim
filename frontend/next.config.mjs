@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+
+    experimental: {
+        proxyTimeout: 180_000
+    },
     reactStrictMode: true,
     images: {
         remotePatterns: [

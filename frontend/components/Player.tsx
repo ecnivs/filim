@@ -71,9 +71,29 @@ type PlayerProps = {
     episodes?: { number: string; title?: string | null; season?: number }[];
     seasons?: { id: string; title: string }[];
     isMovie?: boolean;
+    /** Full-area loading overlay while the watch layout refetches the stream (audio / quality / episode). */
+    isStreamLoading?: boolean;
 };
 
 const PROGRESS_INTERVAL_MS = 15000;
+
+function resolveAudioPreferenceCode(
+    audioLanguages: PlayerProps["audioLanguages"] | undefined,
+    selectedId: string | null
+): string | null {
+    if (!selectedId) return null;
+    if (!audioLanguages?.length) {
+        return selectedId === "ja" || selectedId === "en" ? selectedId : null;
+    }
+    const byId = audioLanguages.find((l) => l.id === selectedId);
+    if (byId?.code) return byId.code;
+    if (byId) return byId.id;
+    if (selectedId === "ja" || selectedId === "en") {
+        const hit = audioLanguages.find((l) => l.code === selectedId || l.id === selectedId);
+        return hit?.code ?? selectedId;
+    }
+    return null;
+}
 
 export function Player({
     source,
@@ -87,7 +107,7 @@ export function Player({
     onProgress,
     onEnded,
     onError,
-    qualityOptions,
+    qualityOptions: qualityOptionsProp,
     currentQualityId,
     onChangeQuality,
     introEndSeconds,
@@ -98,7 +118,8 @@ export function Player({
     animeId,
     episodes,
     seasons,
-    isMovie = false
+    isMovie = false,
+    isStreamLoading = false
 }: PlayerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -128,6 +149,8 @@ export function Player({
     const [currentAudioId, setCurrentAudioId] = useState<number | null>(null);
     const [hasEnded, setHasEnded] = useState(false);
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
+    const [hlsQualityOptions, setHlsQualityOptions] = useState<QualityOption[]>([]);
+    const [hlsQualityValue, setHlsQualityValue] = useState("auto");
     const [playbackSpeed, setPlaybackSpeed] = useState(1);
     const episodesTimeoutRef = useRef<number | null>(null);
     const lastTimeRef = useRef<number>(0);
@@ -161,12 +184,13 @@ export function Player({
     const initialTimeSecondsRef = useRef(initialTimeSeconds);
     initialTimeSecondsRef.current = initialTimeSeconds;
 
-    const [selectedAudioLanguageId, setSelectedAudioLanguageId] = useState<string | null>(
-        () =>
-            audioLanguages && audioLanguages.length > 0
-                ? audioLanguages.find((lang) => lang.isDefault)?.id ?? audioLanguages[0]?.id
-                : null
-    );
+    const [selectedAudioLanguageId, setSelectedAudioLanguageId] = useState<string | null>(() => {
+        if (currentLanguageId) return currentLanguageId;
+        if (audioLanguages && audioLanguages.length > 0) {
+            return audioLanguages.find((lang) => lang.isDefault)?.id ?? audioLanguages[0]?.id ?? null;
+        }
+        return null;
+    });
 
     useEffect(() => {
         if (typeof window === "undefined" || !navigator) return;
@@ -208,20 +232,28 @@ export function Player({
         const isEpisodeSwitch = lastEpisodeLabelRef.current !== episodeLabel;
 
         if (!source || !source.url) {
-            if (isEpisodeSwitch) {
-                video.removeAttribute("src");
-                video.load();
-            }
+            // Waiting for a manifest (new episode or first load). Quality/audio use in-player HLS
+            // switching and do not tear down the stream.
+            setHlsQualityOptions([]);
+            setHlsQualityValue("auto");
+            video.removeAttribute("src");
+            video.load();
             setIsBuffering(true);
+            setIsPlayerReady(false);
+            setIsPlaying(false);
             return;
         }
 
         const isHls = source.isHls ?? source.url.includes(".m3u8");
-        const isQualitySwitch = !isEpisodeSwitch && lastSourceUrlRef.current != null && lastSourceUrlRef.current !== source.url;
 
-        const resumeTime = isQualitySwitch && savedTime > 0
-            ? savedTime
-            : (initialTimeSecondsRef.current ?? 0);
+        // New episode: use saved progress from the server (initialTimeSeconds). Same episode with a
+        // new manifest (quality/audio): continue from the live playhead (savedTime), even if the URL
+        // were unchanged.
+        const resumeTime = isEpisodeSwitch
+            ? (initialTimeSecondsRef.current ?? 0)
+            : savedTime > 0
+              ? savedTime
+              : (initialTimeSecondsRef.current ?? 0);
 
         const applyResumeTime = () => {
             if (resumeTime > 0 && (!video.duration || resumeTime < video.duration)) {
@@ -242,12 +274,49 @@ export function Player({
             hls.loadSource(source.url);
             hls.attachMedia(video);
 
+            const rebuildHlsQualityMenu = () => {
+                const levels = hls.levels;
+                if (!levels || levels.length <= 1) {
+                    setHlsQualityOptions([]);
+                    setHlsQualityValue("auto");
+                    return;
+                }
+                const withIdx = levels.map((lvl, i) => ({ lvl, i }));
+                withIdx.sort((a, b) => (b.lvl.height || 0) - (a.lvl.height || 0));
+                const opts: QualityOption[] = [
+                    { id: "auto", label: "Auto", value: null },
+                    ...withIdx.map(({ lvl, i }) => ({
+                        id: `lvl-${i}`,
+                        label: lvl.height ? `${lvl.height}p` : lvl.name ? String(lvl.name) : `Stream ${i + 1}`,
+                        value: String(i)
+                    }))
+                ];
+                setHlsQualityOptions(opts);
+                const auto = hls.loadLevel === -1 || hls.autoLevelEnabled;
+                setHlsQualityValue(auto ? "auto" : `lvl-${hls.currentLevel}`);
+            };
+
             hls.on(Hls.Events.ERROR, (_event, _data) => {
             });
 
             hls.on(Hls.Events.MANIFEST_PARSED, (_event, _data) => {
                 // Apply resume position here — HLS is guaranteed to be ready to seek
                 applyResumeTime();
+                rebuildHlsQualityMenu();
+            });
+
+            hls.on(Hls.Events.LEVELS_UPDATED, () => {
+                rebuildHlsQualityMenu();
+            });
+
+            hls.on(Hls.Events.LEVEL_SWITCHED, () => {
+                if (hlsRef.current !== hls) return;
+                const inst = hlsRef.current;
+                if (inst.loadLevel === -1 || inst.autoLevelEnabled) {
+                    setHlsQualityValue("auto");
+                } else {
+                    setHlsQualityValue(`lvl-${inst.currentLevel}`);
+                }
             });
 
             hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_event, data: any) => {
@@ -293,11 +362,16 @@ export function Player({
                 }
 
 
-                const preferred = audioLanguages?.find((lang) => lang.id === selectedAudioLanguageId);
-                if (preferred && preferred.code) {
-                    const matchByCode = (data.audioTracks || []).findIndex(
-                        (track: any) => track.lang === preferred.code || track.name === preferred.code
-                    );
+                const code = resolveAudioPreferenceCode(audioLanguages, selectedAudioLanguageId);
+                if (code) {
+                    const matchByCode = (data.audioTracks || []).findIndex((track: any) => {
+                        const lang = track.lang as string | undefined;
+                        return (
+                            track.lang === code ||
+                            track.name === code ||
+                            (typeof lang === "string" && lang.split("-")[0] === code)
+                        );
+                    });
                     if (matchByCode >= 0) {
                         const anyHls = hls as any;
                         anyHls.audioTrack = matchByCode;
@@ -323,6 +397,32 @@ export function Player({
             }
         };
 
+        /** Seconds of media buffered ahead of the playhead (0 if none). */
+        const bufferAhead = (v: HTMLVideoElement): number => {
+            if (!v.buffered.length) return 0;
+            const t = v.currentTime;
+            let maxAhead = 0;
+            for (let i = 0; i < v.buffered.length; i++) {
+                const start = v.buffered.start(i);
+                const end = v.buffered.end(i);
+                if (start <= t + 0.01 && t <= end + 0.01) {
+                    maxAhead = Math.max(maxAhead, end - t);
+                }
+            }
+            return maxAhead;
+        };
+
+        /** `waiting` sets buffering, but `playing` often does not fire again after a mid-play stall. */
+        const syncBufferingFromElement = () => {
+            if (video.paused || video.ended) return;
+            const dur = video.duration || 0;
+            const t = video.currentTime;
+            const ahead = bufferAhead(video);
+            if (ahead > 0.35 || (dur > 0 && t >= dur - 0.5)) {
+                setIsBuffering(false);
+            }
+        };
+
         const handleTimeUpdate = () => {
             if (!isScrubbingRef.current) {
                 const t = video.currentTime || 0;
@@ -343,6 +443,7 @@ export function Player({
                     setShowSkipIntro(false);
                 }
             }
+            syncBufferingFromElement();
         };
 
         const handleProgress = () => {
@@ -357,6 +458,7 @@ export function Player({
                 }
                 setBufferedPercent((currentBuffered / video.duration) * 100);
             }
+            syncBufferingFromElement();
         };
 
         const handlePlaying = () => {
@@ -366,6 +468,7 @@ export function Player({
 
         const handlePause = () => {
             setIsPlaying(false);
+            setIsBuffering(false);
             if (durationRef.current && onProgressRef.current) {
                 onProgressRef.current({
                     positionSeconds: video.currentTime || lastTimeRef.current,
@@ -394,6 +497,16 @@ export function Player({
 
         const handleCanPlay = () => {
             setIsPlayerReady(true);
+            syncBufferingFromElement();
+        };
+
+        const handleCanPlayThrough = () => {
+            setIsPlayerReady(true);
+            syncBufferingFromElement();
+        };
+
+        const handleSeeked = () => {
+            syncBufferingFromElement();
         };
 
         video.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -404,6 +517,8 @@ export function Player({
         video.addEventListener("progress", handleProgress);
         video.addEventListener("ended", handleEnded);
         video.addEventListener("canplay", handleCanPlay);
+        video.addEventListener("canplaythrough", handleCanPlayThrough);
+        video.addEventListener("seeked", handleSeeked);
 
         void video
             .play()
@@ -421,12 +536,43 @@ export function Player({
             video.removeEventListener("progress", handleProgress);
             video.removeEventListener("ended", handleEnded);
             video.removeEventListener("canplay", handleCanPlay);
+            video.removeEventListener("canplaythrough", handleCanPlayThrough);
+            video.removeEventListener("seeked", handleSeeked);
             if (hlsRef.current) {
                 hlsRef.current.destroy();
                 hlsRef.current = null;
             }
         };
     }, [source?.url]);
+
+    useEffect(() => {
+        hasAppliedInitialTime.current = false;
+    }, [episodeLabel]);
+
+    useEffect(() => {
+        if (currentLanguageId) {
+            setSelectedAudioLanguageId(currentLanguageId);
+        }
+    }, [currentLanguageId]);
+
+    useEffect(() => {
+        const hls = hlsRef.current;
+        const tracks = hls?.audioTracks;
+        if (!hls || !tracks?.length) return;
+        const code = resolveAudioPreferenceCode(audioLanguages, selectedAudioLanguageId);
+        if (!code) return;
+        const idx = tracks.findIndex((t: any) => {
+            const lang = t.lang as string | undefined;
+            return (
+                t.lang === code ||
+                t.name === code ||
+                (typeof lang === "string" && lang.split("-")[0] === code)
+            );
+        });
+        if (idx >= 0 && hls.audioTrack !== idx) {
+            hls.audioTrack = idx;
+        }
+    }, [selectedAudioLanguageId, audioLanguages, source?.url]);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -870,11 +1016,50 @@ export function Player({
     const progressPercent = duration ? (currentTime / duration) * 100 : 0;
     const effectivePercent = isScrubbing ? scrubPercent : progressPercent;
 
+    const showStreamReloadSpinner =
+        !hasEnded &&
+        (isStreamLoading ||
+            (isPlaying && (isBuffering || !isPlayerReady)) ||
+            (!isPlaying && !isPlayerReady));
+
     const changePlaybackSpeed = (speed: number) => {
         const video = videoRef.current;
         if (!video) return;
         video.playbackRate = speed;
         setPlaybackSpeed(speed);
+    };
+
+    const useHlsQualityMenu = hlsQualityOptions.length > 0;
+    const resolvedQualityOptions = useHlsQualityMenu
+        ? hlsQualityOptions
+        : qualityOptionsProp && qualityOptionsProp.length > 0
+          ? qualityOptionsProp
+          : [];
+    const resolvedQualityValue = useHlsQualityMenu
+        ? hlsQualityValue
+        : qualityOptionsProp && qualityOptionsProp.length > 0
+          ? currentQualityId ?? "auto"
+          : "auto";
+
+    const handleResolvedQualityChange = (id: string) => {
+        if (hlsQualityOptions.length > 0) {
+            const hls = hlsRef.current;
+            if (!hls) return;
+            if (id === "auto") {
+                hls.loadLevel = -1;
+                setHlsQualityValue("auto");
+            } else {
+                const n = Number(id.replace(/^lvl-/, ""));
+                if (!Number.isNaN(n)) {
+                    hls.loadLevel = n;
+                    setHlsQualityValue(id);
+                }
+            }
+            return;
+        }
+        if (qualityOptionsProp && qualityOptionsProp.length > 0) {
+            onChangeQuality?.(id === "auto" ? null : id);
+        }
     };
 
     return (
@@ -1038,13 +1223,13 @@ export function Player({
                             className="flex items-center gap-4"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            {qualityOptions && qualityOptions.length > 0 && (
+                            {resolvedQualityOptions.length > 0 && (
                                 <Menu
-                                    label="Quality"
+                                    label="Source"
                                     icon={<Settings className="h-5 w-5 sm:h-6 sm:w-6" />}
-                                    value={currentQualityId ?? "auto"}
-                                    options={qualityOptions.map(o => ({ id: o.id, label: o.label }))}
-                                    onChange={(id) => onChangeQuality?.(id === "auto" ? null : id)}
+                                    value={resolvedQualityValue}
+                                    options={resolvedQualityOptions.map((o) => ({ id: o.id, label: o.label }))}
+                                    onChange={handleResolvedQualityChange}
                                     isOpen={activeMenu === "quality"}
                                     onToggle={(open) => {
                                         if (open) setActiveMenu("quality");
@@ -1059,17 +1244,37 @@ export function Player({
                 </Transition>
 
                 {/* Center play/pause indicator */}
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    {!isPlaying && !isBuffering && isPlayerReady && (
+                <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
+                    {!isPlaying &&
+                        !isBuffering &&
+                        isPlayerReady &&
+                        !showStreamReloadSpinner && (
                         <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
                             <Play className="h-7 w-7 sm:h-10 sm:w-10 text-white fill-white ml-1 sm:ml-2 drop-shadow-lg" />
                         </div>
                     )}
-                    {(isBuffering || (!isPlayerReady && !hasEnded)) && (
+                    {/* Spinner: stream refetch (episode / audio / quality), rebuffer, or first frame. */}
+                    {showStreamReloadSpinner && (
                         <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center">
-                            <svg className="animate-spin h-10 w-10 sm:h-16 sm:w-16 text-ncyan drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-100" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            <svg
+                                className="animate-spin h-10 w-10 sm:h-16 sm:w-16 text-ncyan drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    className="opacity-20"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                ></circle>
+                                <path
+                                    className="opacity-100"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                ></path>
                             </svg>
                             <span className="sr-only">Loading</span>
                         </div>
@@ -1322,7 +1527,7 @@ export function Player({
                                                 }
                                             ]}
                                             activeIds={[
-                                                `audio-${currentLanguageId}`,
+                                                `audio-${selectedAudioLanguageId ?? currentLanguageId ?? ""}`,
                                                 `sub-${currentSubtitleId ?? -1}`
                                             ]}
                                             onSelect={(id) => {

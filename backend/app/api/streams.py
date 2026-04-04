@@ -41,6 +41,11 @@ async def get_episode_stream(
     mode: str = Query("sub", pattern="^(sub|dub)$"),
     language: Optional[str] = Query(None, pattern="^(ja|en)$"),
     quality: Optional[str] = Query(None),
+    variant: Optional[str] = Query(
+        None,
+        description="Preferred stream variant id from the API list (e.g. v0, v1).",
+        pattern="^v[0-9]+$",
+    ),
     device_token: Optional[str] = Query(None),
 ) -> StreamResponseModel:
     service = _get_stream_service()
@@ -57,6 +62,7 @@ async def get_episode_stream(
             mode=effective_mode,
             preferred_quality=quality,
             device_token=device_token,
+            variant_id=variant,
         )
     except RuntimeError as exc:
         raise HTTPException(
@@ -67,7 +73,7 @@ async def get_episode_stream(
     if resolved_language == "en":
         audio_label = "English"
     else:
-        audio_label = "Japanese (日本語)"
+        audio_label = "日本語"
 
     audio_languages = [
         AudioLanguageModel(

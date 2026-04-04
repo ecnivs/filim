@@ -11,7 +11,7 @@ class StreamVariantModel(BaseModel):
     resolution: Optional[str] = None
     provider: Optional[str] = None
     bitrate_kbps: Optional[int] = None
-    kind: str  # "hls" or "file"
+    kind: str
 
 
 class StreamService:
@@ -19,7 +19,7 @@ class StreamService:
         self.source = source or AllAnimeSourceAdapter()
         self.resolver = StreamResolver()
 
-    @cache_response(ttl_seconds=1800)  # Cache manifests for 30 mins
+    @cache_response(ttl_seconds=1800)
     async def get_hls_manifest_for_episode(
         self,
         anime_id: str,
@@ -27,6 +27,7 @@ class StreamService:
         mode: str,
         preferred_quality: Optional[str],
         device_token: Optional[str],
+        variant_id: Optional[str] = None,
     ) -> tuple[str, list[StreamVariantModel]]:
         candidates = await self.source.get_stream_candidates(
             show_id=anime_id,
@@ -37,8 +38,6 @@ class StreamService:
         if not candidates:
             raise RuntimeError("No stream candidates available")
 
-        # Provider preference: some hosts give more reliable or higher-quality
-        # streams. This list mirrors ani-cli's general ordering.
         preferred_providers = [
             "fm-hls",
             "vn-hls",
@@ -58,9 +57,18 @@ class StreamService:
             except ValueError:
                 return len(preferred_providers)
 
-        # Sort all candidates by provider preference first; resolution/quality
-        # is handled by the resolver/yt-dlp where possible.
         ordered = sorted(candidates, key=provider_rank)
+
+        if variant_id and variant_id.startswith("v") and len(variant_id) > 1:
+            try:
+                pick_idx = int(variant_id[1:])
+                if 0 <= pick_idx < len(ordered):
+                    chosen = ordered[pick_idx]
+                    ordered = [chosen] + [
+                        c for i, c in enumerate(ordered) if i != pick_idx
+                    ]
+            except ValueError:
+                pass
 
         resolved: ResolvedStream | None = None
         chosen_source: StreamCandidateModel | None = None

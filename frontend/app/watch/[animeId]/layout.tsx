@@ -1,8 +1,9 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { api } from "@/lib/http";
+import { episodesMatchForProgress } from "@/lib/episode-match";
 import { Player } from "@/components/Player";
 import { WatchProvider, useWatch } from "./WatchContext";
 
@@ -26,9 +27,12 @@ type AnimeDetails = {
 function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     const params = useParams<{ animeId: string; episode: string }>();
     const router = useRouter();
-    const { state } = useWatch();
+    const { state, setEpisodeData } = useWatch();
+    const prevRouteKeyRef = useRef<string | null>(null);
     
     const [language, setLanguage] = useState<string>("ja");
+    const languageRef = useRef(language);
+    languageRef.current = language;
     const [selectedQualityId, setSelectedQualityId] = useState<string | null>(null);
     const [animeDetails, setAnimeDetails] = useState<AnimeDetails | null>(null);
     const [seasons, setSeasons] = useState<{ id: string; title: string }[]>([]);
@@ -43,6 +47,126 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         }
         return null;
     }, [params.animeId, params.episode]);
+
+    const routeKey = routeIds ? `${routeIds.animeId}/${routeIds.episode}` : null;
+
+    const qualityHint = useMemo(() => {
+        if (selectedQualityId == null) return undefined;
+        const v = state.variants.find((x) => x.id === selectedQualityId);
+        return v?.resolution ?? undefined;
+    }, [selectedQualityId, state.variants]);
+
+    // Refetch stream on episode, audio language, or API-driven quality change. Multi-level HLS uses
+    // in-player levels when available; otherwise variants + quality param.
+    useEffect(() => {
+        if (!routeIds || !routeKey) return;
+
+        const ids = routeIds;
+
+        const prevKey = prevRouteKeyRef.current;
+        const isEpisodeChange = prevKey !== null && prevKey !== routeKey;
+        const applyServerResume = prevKey === null || isEpisodeChange;
+        prevRouteKeyRef.current = routeKey;
+
+        if (isEpisodeChange) {
+            setSelectedQualityId(null);
+        }
+
+        const qualityParam = isEpisodeChange ? undefined : qualityHint;
+        const variantParam = isEpisodeChange ? null : selectedQualityId;
+
+        let cancelled = false;
+
+        async function fetchStream() {
+            setEpisodeData({
+                isPageLoading: true,
+                error: null,
+                ...(isEpisodeChange
+                    ? {
+                          manifestUrl: null,
+                          variants: [],
+                          audioLanguages: undefined
+                      }
+                    : {})
+            });
+
+            try {
+                let resumePosition: number | null = null;
+                if (applyServerResume) {
+                    try {
+                        const progressRes = await api.get<{
+                            items: { episode: string; position_seconds: number; duration_seconds: number }[];
+                        }>(`/user/progress/${ids.animeId}`);
+                        const match = progressRes.data.items.find((i) =>
+                            episodesMatchForProgress(i.episode, ids.episode)
+                        );
+                        if (match && match.position_seconds < match.duration_seconds) {
+                            resumePosition = match.position_seconds;
+                        }
+                    } catch {
+                        /* ignore */
+                    }
+                }
+
+                let streamLanguage = language;
+                if (applyServerResume) {
+                    try {
+                        const prefRes = await api.get<{ item: { audio_language_id: string } | null }>(
+                            "/audio-preference"
+                        );
+                        const pref = prefRes.data.item?.audio_language_id;
+                        if (pref === "ja" || pref === "en") streamLanguage = pref;
+                        else if (pref === "sub") streamLanguage = "ja";
+                        else if (pref === "dub") streamLanguage = "en";
+                    } catch {
+                        /* ignore */
+                    }
+                    if (streamLanguage !== language) {
+                        setLanguage(streamLanguage);
+                    }
+                }
+
+                languageRef.current = streamLanguage;
+
+                const streamRes = await api.get<{
+                    manifest_url: string;
+                    variants: { id: string; resolution?: string | null; provider?: string | null; kind: string }[];
+                    audio_languages?: { id: string; code?: string | null; label: string; is_default?: boolean }[];
+                }>(`/anime/${ids.animeId}/episodes/${ids.episode}/stream`, {
+                    params: {
+                        language: streamLanguage,
+                        ...(qualityParam ? { quality: qualityParam } : {}),
+                        ...(variantParam ? { variant: variantParam } : {})
+                    }
+                });
+
+                if (!cancelled) {
+                    setEpisodeData({
+                        manifestUrl: streamRes.data.manifest_url,
+                        variants: streamRes.data.variants,
+                        audioLanguages: streamRes.data.audio_languages,
+                        resumePositionSeconds: applyServerResume ? resumePosition : null,
+                        isPageLoading: false,
+                        error: null
+                    });
+                }
+            } catch (err: unknown) {
+                if (!cancelled) {
+                    const message =
+                        err instanceof Error ? err.message : "Episode unavailable.";
+                    setEpisodeData({
+                        error: message,
+                        isPageLoading: false
+                    });
+                }
+            }
+        }
+
+        void fetchStream();
+        return () => {
+            cancelled = true;
+        };
+    }, [routeKey, routeIds, language, qualityHint, selectedQualityId, setEpisodeData]);
 
     // Fetch Anime Details (Once per animeId)
     useEffect(() => {
@@ -136,14 +260,17 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         api.post("/audio-preference", { audio_language_id: nextId }).catch(() => {});
     }, []);
 
-    const stableQualityOptions = useMemo(() => [
-        { id: "auto", label: "Auto", value: null },
-        ...state.variants.map((v) => ({
-            id: v.id,
-            label: v.resolution ? `${v.resolution} (${v.provider || "Source"})` : (v.provider || "Source"),
-            value: v.resolution ?? null
-        }))
-    ], [state.variants]);
+    const stableQualityOptions = useMemo(
+        () => [
+            { id: "auto", label: "Auto", value: null as string | null },
+            ...state.variants.map((v) => ({
+                id: v.id,
+                label: v.resolution ? `${v.resolution} (${v.provider || "Source"})` : (v.provider || "Source"),
+                value: v.resolution ?? null
+            }))
+        ],
+        [state.variants]
+    );
 
     const handleProgress = useCallback((payload: any) => {
         if (!routeIds) return;
@@ -164,6 +291,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                 {!state.error && (
                     <Player
                         source={state.manifestUrl ? { url: state.manifestUrl } : undefined}
+                        isStreamLoading={state.isPageLoading}
                         title={animeDetails?.title}
                         episodeLabel={episodeLabel}
                         onBack={handleBack}
