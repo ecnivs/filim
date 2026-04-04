@@ -25,12 +25,6 @@ type ShowDetails = {
     available_audio_languages?: string[];
 };
 
-type RecommendationSection = {
-    id: string;
-    title: string;
-    items: ShowSummaryCard[];
-};
-
 type PreferenceItem = {
     show_id: string;
     in_list: boolean;
@@ -58,19 +52,17 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
         }
     });
 
-    const recs = useQuery({
-        queryKey: ["show-recs", id],
-        enabled: !!id && !profile?.is_guest,
+    const similar = useQuery({
+        queryKey: ["show-similar", id],
+        enabled: !!id,
         queryFn: async () => {
-            const res = await api.get<{ sections: RecommendationSection[] }>(
-                "/user/recommendations"
+            const res = await api.get<{ items: ShowSummaryCard[] }>(
+                `/catalog/${id}/similar`,
+                { params: { limit: 12 } }
             );
-            return res.data.sections;
+            return res.data.items;
         }
     });
-
-    const moreLikeThis =
-        recs.data?.find((s) => s.id !== "trending") ?? recs.data?.[0];
 
     const preferences = useQuery({
         queryKey: ["preferences"],
@@ -389,11 +381,11 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                 </section>
 
                 {/* More Like This */}
-                {moreLikeThis && moreLikeThis.items.filter(item => item.id !== data.id).length > 0 && (
+                {similar.data && similar.data.filter(item => item.id !== data.id).length > 0 && (
                     <section className="space-y-4 md:space-y-6">
                         <h2 className="text-xl md:text-2xl font-black text-white">More Like This</h2>
                         <div className="grid grid-cols-3 sm:grid-cols-3 gap-x-2 gap-y-4 md:gap-4">
-                            {moreLikeThis.items.filter(item => item.id !== data.id).slice(0, 6).map((card) => (
+                            {similar.data.filter(item => item.id !== data.id).slice(0, 6).map((card) => (
                                 <ShowCard
                                     key={card.id}
                                     show={card}

@@ -24,6 +24,9 @@ query ($id: String!) {
     description
     genres
     banner
+    thumbnail
+    type
+    relatedShows
     availableEpisodesDetail
   }
 }

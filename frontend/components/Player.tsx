@@ -24,6 +24,11 @@ import {
     ChevronDown
 } from "lucide-react";
 import { EpisodesPanel } from "./EpisodesPanel";
+import {
+    readSessionPlayIntent,
+    sessionPlayingKey,
+    writeSessionPlayIntent
+} from "@/lib/watch-session-storage";
 
 type PlayerSource = {
     url: string;
@@ -68,6 +73,8 @@ type PlayerProps = {
     onBack?: () => void;
     onShowEpisodes?: () => void;
     showId?: string;
+    /** Route/catalog episode id for session resume / play-intent across refresh (e.g. same as URL segment). */
+    progressEpisodeKey?: string;
     episodes?: { number: string; title?: string | null; season?: number }[];
     seasons?: { id: string; title: string }[];
     isMovie?: boolean;
@@ -116,6 +123,7 @@ export function Player({
     onBack,
     onShowEpisodes,
     showId,
+    progressEpisodeKey,
     episodes,
     seasons,
     isMovie = false,
@@ -256,10 +264,15 @@ export function Player({
                 : (initialTimeSecondsRef.current ?? 0);
 
         const applyResumeTime = () => {
-            if (resumeTime > 0 && (!video.duration || resumeTime < video.duration)) {
-                video.currentTime = resumeTime;
-                setCurrentTime(resumeTime);
-                lastTimeRef.current = resumeTime;
+            const rt = isEpisodeSwitch
+                ? (initialTimeSecondsRef.current ?? 0)
+                : savedTime > 0
+                    ? savedTime
+                    : (initialTimeSecondsRef.current ?? 0);
+            if (rt > 0 && (!video.duration || rt < video.duration)) {
+                video.currentTime = rt;
+                setCurrentTime(rt);
+                lastTimeRef.current = rt;
             }
             lastSourceUrlRef.current = source.url;
             lastEpisodeLabelRef.current = episodeLabel;
@@ -547,7 +560,7 @@ export function Player({
 
     useEffect(() => {
         hasAppliedInitialTime.current = false;
-    }, [episodeLabel]);
+    }, [episodeLabel, source?.url]);
 
     useEffect(() => {
         if (currentLanguageId) {
@@ -576,18 +589,132 @@ export function Player({
 
     useEffect(() => {
         const video = videoRef.current;
-        if (!video || hasAppliedInitialTime.current) return;
-        if (!initialTimeSeconds || initialTimeSeconds <= 0) return;
+        if (!video || !source?.url) return;
+        if (initialTimeSeconds == null || initialTimeSeconds <= 0) return;
 
-        const durationSeconds = video.duration || duration;
-        if (durationSeconds && initialTimeSeconds >= durationSeconds) {
+        let cancelled = false;
+        const target = initialTimeSeconds;
+
+        const applyResume = () => {
+            if (cancelled || hasAppliedInitialTime.current) return;
+            const elDur =
+                Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+            const dur = elDur > 0 ? elDur : duration > 0 ? duration : 0;
+            if (dur > 0 && target >= dur - 0.5) {
+                hasAppliedInitialTime.current = true;
+                return;
+            }
+            if (dur > 0 && target > 0) {
+                video.currentTime = target;
+                setCurrentTime(target);
+                lastTimeRef.current = target;
+                hasAppliedInitialTime.current = true;
+            }
+        };
+
+        const onLoadedMetadata = () => {
+            requestAnimationFrame(() => requestAnimationFrame(applyResume));
+        };
+
+        video.addEventListener("loadedmetadata", onLoadedMetadata);
+        video.addEventListener("loadeddata", applyResume);
+        applyResume();
+
+        return () => {
+            cancelled = true;
+            video.removeEventListener("loadedmetadata", onLoadedMetadata);
+            video.removeEventListener("loadeddata", applyResume);
+        };
+    }, [initialTimeSeconds, source?.url, duration]);
+
+    /**
+     * After Ctrl+R, resume playback if the tab was playing. Unmuted autoplay is usually blocked;
+     * we fall back to muted play() then restore `video.muted` when the user had sound on.
+     */
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !source?.url || !isPlayerReady || !showId || !progressEpisodeKey) return;
+
+        let storageKey: string;
+        try {
+            storageKey = sessionPlayingKey(showId, progressEpisodeKey);
+        } catch {
             return;
         }
 
-        video.currentTime = initialTimeSeconds;
-        setCurrentTime(initialTimeSeconds);
-        hasAppliedInitialTime.current = true;
-    }, [initialTimeSeconds, duration]);
+        const intent = readSessionPlayIntent(showId, progressEpisodeKey);
+        if (!intent?.resumePlay) return;
+
+        const clearIntent = () => {
+            try {
+                sessionStorage.removeItem(storageKey);
+            } catch {
+                /* ignore */
+            }
+        };
+
+        const attemptResume = () => {
+            if (!video.paused && !video.ended) {
+                setIsPlaying(true);
+                clearIntent();
+                return;
+            }
+
+            const hadMuted = intent.videoMuted;
+
+            const restoreMuteIfNeeded = () => {
+                if (!hadMuted) {
+                    video.muted = false;
+                    setIsMuted(false);
+                }
+            };
+
+            void video
+                .play()
+                .then(() => {
+                    setIsPlaying(true);
+                    clearIntent();
+                })
+                .catch(() => {
+                    video.muted = true;
+                    setIsMuted(true);
+                    void video
+                        .play()
+                        .then(() => {
+                            setIsPlaying(true);
+                            restoreMuteIfNeeded();
+                            clearIntent();
+                        })
+                        .catch(() => {
+                            setIsPlaying(false);
+                            restoreMuteIfNeeded();
+                            clearIntent();
+                        });
+                });
+        };
+
+        attemptResume();
+
+        let cancelled = false;
+        if (initialTimeSeconds != null && initialTimeSeconds > 0) {
+            const onSeeked = () => {
+                if (cancelled) return;
+                attemptResume();
+            };
+            video.addEventListener("seeked", onSeeked);
+            const t = window.setTimeout(() => {
+                if (cancelled) return;
+                attemptResume();
+            }, 1500);
+            return () => {
+                cancelled = true;
+                video.removeEventListener("seeked", onSeeked);
+                window.clearTimeout(t);
+            };
+        }
+
+        return undefined;
+    }, [source?.url, isPlayerReady, showId, progressEpisodeKey, initialTimeSeconds]);
 
     useEffect(() => {
         if (!onProgress || !source?.url) return;
@@ -618,7 +745,17 @@ export function Player({
     }, [onProgress, source?.url]);
 
     useEffect(() => {
-        const handleUnloadOrHide = () => {
+        const persistPlayIntentForHardNavigation = () => {
+            const video = videoRef.current;
+            if (showId && progressEpisodeKey && video) {
+                writeSessionPlayIntent(showId, progressEpisodeKey, {
+                    resumePlay: !(video.paused || video.ended),
+                    videoMuted: video.muted
+                });
+            }
+        };
+
+        const flushProgress = () => {
             if (durationRef.current > 0 && onProgressRef.current) {
                 onProgressRef.current({
                     positionSeconds: lastTimeRef.current,
@@ -628,20 +765,27 @@ export function Player({
             }
         };
 
-        window.addEventListener("pagehide", handleUnloadOrHide);
-        window.addEventListener("beforeunload", handleUnloadOrHide);
-        document.addEventListener("visibilitychange", () => {
+        const onPageHideOrUnload = () => {
+            persistPlayIntentForHardNavigation();
+            flushProgress();
+        };
+
+        const onVisibilityHidden = () => {
             if (document.visibilityState === "hidden") {
-                handleUnloadOrHide();
+                flushProgress();
             }
-        });
+        };
+
+        window.addEventListener("pagehide", onPageHideOrUnload);
+        window.addEventListener("beforeunload", onPageHideOrUnload);
+        document.addEventListener("visibilitychange", onVisibilityHidden);
 
         return () => {
-            window.removeEventListener("pagehide", handleUnloadOrHide);
-            window.removeEventListener("beforeunload", handleUnloadOrHide);
-            // removing anonymous visibilitychange is tricky without a ref, but it's fine for the Player lifetime
+            window.removeEventListener("pagehide", onPageHideOrUnload);
+            window.removeEventListener("beforeunload", onPageHideOrUnload);
+            document.removeEventListener("visibilitychange", onVisibilityHidden);
         };
-    }, []);
+    }, [showId, progressEpisodeKey]);
 
     useEffect(() => {
         const video = videoRef.current;

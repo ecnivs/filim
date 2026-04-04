@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 import Link from "next/link";
 import Image from "next/image";
@@ -30,9 +30,9 @@ type RecommendationSection = {
 };
 
 import { GridView } from "@/components/GridView";
+import { FilimLoadingSurface } from "@/components/FilimLoadingSurface";
 
 export default function HomePage() {
-    const queryClient = useQueryClient();
     const { profile } = useProfile();
     const searchParams = useSearchParams();
     const urlQuery = searchParams.get("q") || "";
@@ -72,7 +72,7 @@ export default function HomePage() {
         },
         getNextPageParam: (lastPage, allPages) => {
             if (allPages.length >= 50) return undefined;
-            if (lastPage && lastPage.length === 0 && allPages.length > 5) return undefined;
+            if (!lastPage || lastPage.length === 0) return undefined;
             return allPages.length + 1;
         },
         initialPageParam: 1,
@@ -84,10 +84,24 @@ export default function HomePage() {
     });
 
     useEffect(() => {
-        if (inView && discovery.hasNextPage && !discovery.isFetchingNextPage) {
-            void discovery.fetchNextPage();
+        if (
+            !inView ||
+            !discovery.data ||
+            discovery.isLoading ||
+            !discovery.hasNextPage ||
+            discovery.isFetchingNextPage
+        ) {
+            return;
         }
-    }, [inView, discovery.hasNextPage, discovery.isFetchingNextPage, discovery.fetchNextPage]);
+        void discovery.fetchNextPage();
+    }, [
+        inView,
+        discovery.data,
+        discovery.isLoading,
+        discovery.hasNextPage,
+        discovery.isFetchingNextPage,
+        discovery.fetchNextPage
+    ]);
 
     const searchResults = useInfiniteQuery({
         queryKey: ["search", urlQuery, urlGenres],
@@ -143,6 +157,7 @@ export default function HomePage() {
                 />
             ) : (
                 <>
+                    <FilimLoadingSurface show={isInitialLoading} className="z-[90]" />
                     {featuredShow && (
                         <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[320px] md:min-h-[500px]">
                             <div className="absolute inset-0">
@@ -259,7 +274,7 @@ export default function HomePage() {
 
                         {/* Intersection Observer Trigger & Completion Message */}
                         <div ref={ref} className="min-h-[100px] flex items-center justify-center w-full">
-                            {discovery.isFetchingNextPage || isInitialLoading ? (
+                            {discovery.isFetchingNextPage ? (
                                 <div className="flex flex-col items-center gap-2 py-8">
                                     <div className="flex gap-1.5">
                                         <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>

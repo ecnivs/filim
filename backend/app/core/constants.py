@@ -15,6 +15,10 @@ SUPPORTED_RELATIONS = {
     REL_ALTERNATIVE_SETTING,
 }
 
+# Upstream may tag franchise-adjacent links as "other"; include for discovery, not season lineup.
+REL_OTHER = "other"
+RELATIONS_FOR_SIMILAR = SUPPORTED_RELATIONS | {REL_OTHER}
+
 # Translation Modes
 MODE_SUB = "sub"
 MODE_DUB = "dub"

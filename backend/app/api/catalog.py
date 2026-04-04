@@ -172,3 +172,14 @@ async def get_show_series(
 ) -> dict[str, list[ShowSummaryResponse]]:
     items = await catalog.get_series_lineup(show_id=show_id, mode=mode)
     return {"items": [ShowSummaryResponse.from_source(i) for i in items]}
+
+
+@router.get("/{show_id}/similar")
+async def get_show_similar(
+    show_id: str,
+    mode: str = Query("sub", pattern="^(sub|dub)$"),
+    limit: int = Query(12, ge=1, le=30),
+    catalog: CatalogService = Depends(_get_catalog_service),
+) -> dict[str, list[ShowSummaryResponse]]:
+    items = await catalog.get_similar_shows(show_id=show_id, mode=mode, limit=limit)
+    return {"items": [ShowSummaryResponse.from_source(i) for i in items]}

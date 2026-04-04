@@ -1,11 +1,44 @@
 from __future__ import annotations
+import re
 from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Show, ShowStats
 from app.sources import AllanimeCatalogAdapter, ShowSummaryModel, EpisodeSummaryModel
 from app.core.utils import normalize_title
-from app.core.constants import MODE_SUB, SUPPORTED_RELATIONS, COMMON_GENRES
+from app.core.constants import (
+    COMMON_GENRES,
+    MODE_SUB,
+    RELATIONS_FOR_SIMILAR,
+    SUPPORTED_RELATIONS,
+)
+
+
+def _franchise_search_query(title: str | None, english_title: str | None) -> str | None:
+    raw = (english_title or title or "").strip()
+    if len(raw) < 4:
+        return None
+    stop = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "tv",
+            "ova",
+            "movie",
+            "special",
+            "specials",
+            "season",
+            "part",
+            "cour",
+            "oav",
+        }
+    )
+    parts = [p for p in re.split(r"[\s:\-–—]+", raw) if p and p.lower() not in stop]
+    if len(parts) < 2:
+        return None
+    q = " ".join(parts[:2])
+    return q if len(q.strip()) >= 4 else None
 
 
 class CatalogService:
@@ -221,30 +254,93 @@ class CatalogService:
         filtered = [s for s in popular if (s.episode_count or 0) == 1]
         return self._deduplicate_results(filtered)
 
+    async def _summaries_from_related_edges(
+        self,
+        root: ShowSummaryModel,
+        mode: str,
+        allowed_relations: set[str],
+    ) -> list[ShowSummaryModel]:
+        out: list[ShowSummaryModel] = []
+        if not root.related_shows:
+            return out
+
+        seen: set[str] = set()
+        if root.id:
+            seen.add(root.id)
+
+        for rel in root.related_shows:
+            rel_id = rel.get("showId")
+            relation = (rel.get("relation") or "").lower()
+            if relation not in allowed_relations or not rel_id or rel_id in seen:
+                continue
+            try:
+                rel_show = await self.get_show_details(rel_id, mode=mode)
+                out.append(rel_show)
+                seen.add(rel_id)
+            except Exception:
+                continue
+        return out
+
     async def get_series_lineup(
         self, show_id: str, mode: str = MODE_SUB
     ) -> list[ShowSummaryModel]:
         """Fetch related seasons/shows for a series lineup."""
         root = await self.get_show_details(show_id, mode=mode)
-        if not root.related_shows:
+        related = await self._summaries_from_related_edges(
+            root, mode, SUPPORTED_RELATIONS
+        )
+        if not related:
             return [root]
+        return [root, *related]
 
-        lineup = [root]
+    async def get_similar_shows(
+        self,
+        show_id: str,
+        mode: str = MODE_SUB,
+        limit: int = 12,
+    ) -> list[ShowSummaryModel]:
+        """Related entries first, then same-show genres, then a short franchise title search."""
+        target = max(1, min(limit, 30))
+        root = await self.get_show_details(show_id, mode=mode)
+        related = await self._summaries_from_related_edges(
+            root, mode, RELATIONS_FOR_SIMILAR
+        )
 
-        for rel in root.related_shows:
-            rel_id = rel.get("showId")
-            relation = (rel.get("relation") or "").lower()
+        out: list[ShowSummaryModel] = []
+        seen: set[str] = {show_id}
+        for s in related:
+            if s.id and s.id not in seen:
+                out.append(s)
+                seen.add(s.id)
+            if len(out) >= target:
+                return out
 
-            if relation not in SUPPORTED_RELATIONS:
-                continue
-
-            if not rel_id or any(item.id == rel_id for item in lineup):
-                continue
-
+        tags = [t.strip() for t in (root.tags or []) if t and str(t).strip()]
+        for tag in tags[:3]:
+            if len(out) >= target:
+                break
             try:
-                rel_show = await self.get_show_details(rel_id, mode=mode)
-                lineup.append(rel_show)
+                batch = await self.search(query="", genres=[tag], mode=mode, page=1)
             except Exception:
                 continue
+            for item in batch:
+                if item.id and item.id not in seen:
+                    out.append(item)
+                    seen.add(item.id)
+                if len(out) >= target:
+                    return out
 
-        return lineup
+        q = _franchise_search_query(root.title, root.english_title)
+        if q and len(out) < target:
+            try:
+                batch = await self.search(query=q, mode=mode, page=1)
+            except Exception:
+                batch = []
+            for item in batch:
+                if item.id and item.id not in seen:
+                    out.append(item)
+                    seen.add(item.id)
+                if len(out) >= target:
+                    break
+
+        return out[:target]

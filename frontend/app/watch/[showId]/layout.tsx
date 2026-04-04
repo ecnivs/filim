@@ -4,6 +4,11 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { api } from "@/lib/http";
 import { episodesMatchForProgress } from "@/lib/episode-match";
+import {
+    mergeResumeFromSessionAndApi,
+    readSessionResume,
+    writeSessionResume
+} from "@/lib/watch-session-storage";
 import { Player } from "@/components/Player";
 import { WatchProvider, useWatch } from "./WatchContext";
 
@@ -28,7 +33,8 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     const params = useParams<{ showId: string; episode: string }>();
     const router = useRouter();
     const { state, setEpisodeData } = useWatch();
-    const prevRouteKeyRef = useRef<string | null>(null);
+    /** Set only after a stream fetch succeeds; avoids treating language/quality refetches as "same visit" and skipping progress. */
+    const streamCommittedRouteKeyRef = useRef<string | null>(null);
 
     const [language, setLanguage] = useState<string>("ja");
     const languageRef = useRef(language);
@@ -61,10 +67,9 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
 
         const ids = routeIds;
 
-        const prevKey = prevRouteKeyRef.current;
-        const isEpisodeChange = prevKey !== null && prevKey !== routeKey;
-        const applyServerResume = prevKey === null || isEpisodeChange;
-        prevRouteKeyRef.current = routeKey;
+        const committed = streamCommittedRouteKeyRef.current;
+        const isEpisodeChange = committed !== null && committed !== routeKey;
+        const applyServerResume = committed === null || isEpisodeChange;
 
         if (isEpisodeChange) {
             setSelectedQualityId(null);
@@ -91,6 +96,11 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
             try {
                 let resumePosition: number | null = null;
                 if (applyServerResume) {
+                    const fromSession = readSessionResume(ids.showId, ids.episode);
+                    let fromApi: {
+                        position_seconds: number;
+                        duration_seconds: number;
+                    } | null = null;
                     try {
                         const progressRes = await api.get<{
                             items: { episode: string; position_seconds: number; duration_seconds: number }[];
@@ -99,11 +109,15 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                             episodesMatchForProgress(i.episode, ids.episode)
                         );
                         if (match && match.position_seconds < match.duration_seconds) {
-                            resumePosition = match.position_seconds;
+                            fromApi = {
+                                position_seconds: match.position_seconds,
+                                duration_seconds: match.duration_seconds
+                            };
                         }
                     } catch {
                         /* ignore */
                     }
+                    resumePosition = mergeResumeFromSessionAndApi(fromSession, fromApi);
                 }
 
                 let streamLanguage = language;
@@ -143,10 +157,11 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                         manifestUrl: streamRes.data.manifest_url,
                         variants: streamRes.data.variants,
                         audioLanguages: streamRes.data.audio_languages,
-                        resumePositionSeconds: applyServerResume ? resumePosition : null,
                         isPageLoading: false,
-                        error: null
+                        error: null,
+                        ...(applyServerResume ? { resumePositionSeconds: resumePosition } : {})
                     });
+                    streamCommittedRouteKeyRef.current = routeKey;
                 }
             } catch (err: unknown) {
                 if (!cancelled) {
@@ -269,6 +284,12 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
 
     const handleProgress = useCallback((payload: any) => {
         if (!routeIds) return;
+        writeSessionResume(
+            routeIds.showId,
+            routeIds.episode,
+            payload.positionSeconds,
+            payload.durationSeconds
+        );
         api.post("/user/progress", {
             show_id: routeIds.showId,
             episode: routeIds.episode,
@@ -305,6 +326,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                         currentQualityId={selectedQualityId ?? "auto"}
                         onChangeQuality={setSelectedQualityId}
                         showId={showDetails?.id || routeIds?.showId}
+                        progressEpisodeKey={routeIds?.episode}
                         episodes={showDetails?.episodes || []}
                         seasons={seasons}
                         isMovie={showDetails?.episode_count === 1}
