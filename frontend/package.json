@@ -1,6 +1,7 @@
 {
     "name": "filim-frontend",
     "version": "0.1.0",
+    "description": "A streaming platform for anime, shows, and movies.",
     "private": true,
     "scripts": {
         "dev": "next dev",

@@ -33,7 +33,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 @event.listens_for(engine.sync_engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Optimize SQLite for low-latency LAN performance."""
+    """Tune SQLite pragmas for responsive catalog and playback workloads."""
     if settings.database_url.startswith("sqlite"):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")

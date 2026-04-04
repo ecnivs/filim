@@ -1,7 +1,16 @@
 import "./globals.css";
+import type { Metadata } from "next";
 import { ReactNode } from "react";
 import { LayoutShell } from "@/components/LayoutShell";
 import { ClientProviders } from "@/components/ClientProviders";
+
+export const metadata: Metadata = {
+    title: {
+        default: "Filim",
+        template: "%s | Filim"
+    },
+    description: "A streaming platform for anime, shows, and movies."
+};
 
 export default function RootLayout({
     children,
