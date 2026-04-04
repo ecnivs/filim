@@ -111,10 +111,10 @@ export function SectionRow({
             </section>
 
             {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
-                    <div className="relative flex h-full max-h-[85vh] w-full max-w-7xl flex-col overflow-hidden rounded-lg bg-surface shadow-[0_28px_80px_rgba(0,0,0,0.9)]">
+                <div className="dialog-overlay-centered">
+                    <div className="dialog-panel-shell relative flex h-full max-h-[85vh] w-full max-w-7xl flex-col overflow-hidden">
                         <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
-                            <h2 className="text-xl sm:text-2xl font-semibold text-white">{title}</h2>
+                            <h2 className="text-xl sm:text-2xl font-semibold text-foreground">{title}</h2>
                             <button
                                 type="button"
                                 onClick={() => setIsOpen(false)}

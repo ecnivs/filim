@@ -162,16 +162,16 @@ export default function ProfilesPage() {
                 </div>
 
                 {isCreating && (
-                    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-4">
-                        <div className="w-full max-w-sm rounded-lg bg-surface border border-neutral-800 px-6 py-6 space-y-5 shadow-[0_16px_60px_rgba(0,0,0,0.8)]">
-                            <h2 className="text-xl font-bold">Add Profile</h2>
+                    <div className="dialog-overlay-centered">
+                        <div className="dialog-panel-shell w-full max-w-sm px-6 py-6 space-y-5">
+                            <h2 className="text-xl font-bold text-foreground">Add Profile</h2>
                             <div className="space-y-2">
                                 <label className="block text-xs text-neutral-400 font-medium">Name</label>
                                 <input
                                     type="text"
                                     value={createName}
                                     onChange={(e) => setCreateName(e.target.value)}
-                                    className="w-full rounded bg-neutral-800 border border-neutral-700 px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white transition-colors"
+                                    className="dialog-input"
                                     placeholder="Enter name"
                                     autoFocus
                                 />
@@ -186,7 +186,7 @@ export default function ProfilesPage() {
                                     onChange={(e) =>
                                         setCreatePin(e.target.value.replace(/\\D/g, ""))
                                     }
-                                    className="w-full rounded bg-neutral-800 border border-neutral-700 px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white transition-colors"
+                                    className="dialog-input"
                                     placeholder="••••"
                                 />
                             </div>
@@ -219,14 +219,14 @@ export default function ProfilesPage() {
                 )}
 
                 {unlockingProfile && (
-                    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-4 animate-in fade-in duration-300">
-                        <div className="w-full max-w-xs rounded-lg bg-surface border border-neutral-800 px-8 py-10 space-y-8 shadow-[0_16px_60px_rgba(0,0,0,0.8)] scale-in-center">
+                    <div className="dialog-overlay-centered animate-in fade-in duration-300">
+                        <div className="dialog-panel-shell w-full max-w-xs px-8 py-10 space-y-8 scale-in-center">
                             <div className="text-center space-y-4">
                                 <div className={`h-20 w-20 mx-auto rounded-md bg-gradient-to-br ${AVATAR_COLORS[profiles.data?.findIndex(p => p.id === unlockingProfile.id) ?? 0 % AVATAR_COLORS.length]} flex items-center justify-center text-3xl font-black text-white/90 shadow-xl`}>
                                     {unlockingProfile.name.slice(0, 1).toUpperCase()}
                                 </div>
                                 <div className="space-y-1">
-                                    <h2 className="text-xl font-bold text-white">Profile Lock</h2>
+                                    <h2 className="text-xl font-bold text-foreground">Profile Lock</h2>
                                     <p className="text-sm text-neutral-400">Enter your PIN to access this profile.</p>
                                 </div>
                             </div>
@@ -239,7 +239,7 @@ export default function ProfilesPage() {
                                     maxLength={4}
                                     value={pinInput}
                                     onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
-                                    className="w-full bg-neutral-900 border-2 border-neutral-800 rounded-lg px-4 py-4 text-2xl text-white text-center tracking-[1em] focus:outline-none focus:border-ncyan transition-all"
+                                    className="dialog-input-emphasis"
                                     autoFocus
                                     onKeyDown={(e) => {
                                         if (e.key === "Enter" && pinInput.length >= 4) {

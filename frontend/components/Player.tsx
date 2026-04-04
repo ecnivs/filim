@@ -1677,7 +1677,7 @@ function Menu({
                 leaveTo="opacity-0 scale-95 translate-y-2"
             >
                 {/* Desktop popover */}
-                <div className={`hidden sm:block absolute ${placement === "top" ? "top-full" : "bottom-full"} right-0 ${placement === "top" ? "mt-4" : "mb-4"} w-48 max-h-[70vh] overflow-y-auto rounded-lg bg-[#141414]/95 backdrop-blur-3xl border border-white/10 p-2 shadow-2xl ring-1 ring-white/5 z-50`}>
+                <div className={`hidden sm:block absolute ${placement === "top" ? "top-full" : "bottom-full"} right-0 ${placement === "top" ? "mt-4" : "mb-4"} w-48 max-h-[70vh] overflow-y-auto player-menu-popover p-2 z-50`}>
                     <div className="px-3 py-2 text-[0.65rem] font-black uppercase tracking-[0.2em] text-neutral-500 border-b border-white/5 mb-1">
                         {label}
                     </div>
@@ -1705,9 +1705,10 @@ function Menu({
                 leaveTo="opacity-0 translate-y-full"
             >
                 <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onToggle(false); }}>
-                    <div className="absolute inset-0 bg-black/60" />
-                    <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[#1a1a1a] border-t border-white/10 p-4 pb-8 max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <div className="w-10 h-1 bg-neutral-600 rounded-full mx-auto mb-4" />
+                    <div className="player-menu-scrim" />
+                    {/* SHEET_MAX_MENU: compact single-column picker */}
+                    <div className="player-menu-sheet max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="player-menu-sheet-handle" />
                         <div className="px-2 py-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-500 mb-2">
                             {label}
                         </div>
@@ -1791,7 +1792,7 @@ function TwoColumnMenu({
                 leaveTo="opacity-0 scale-95 translate-y-2"
             >
                 {/* Desktop popover */}
-                <div className="hidden sm:flex absolute bottom-full right-0 mb-4 w-[480px] max-h-[75vh] overflow-hidden rounded-lg bg-[#141414]/95 backdrop-blur-3xl border border-white/10 shadow-2xl ring-1 ring-white/5 z-50">
+                <div className="hidden sm:flex absolute bottom-full right-0 mb-4 w-[480px] max-h-[75vh] overflow-hidden player-menu-popover z-50">
                     {sections.map((section, idx) => (
                         <div key={section.title} className={`flex-1 flex flex-col min-w-0 ${idx === 0 ? "border-r border-white/10" : ""}`}>
                             <div className="px-8 py-6 text-xl font-black uppercase tracking-[0.2em] text-neutral-500 border-b border-white/5">
@@ -1838,9 +1839,10 @@ function TwoColumnMenu({
                 leaveTo="opacity-0 translate-y-full"
             >
                 <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onToggle(false); }}>
-                    <div className="absolute inset-0 bg-black/60" />
-                    <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[#1a1a1a] border-t border-white/10 p-4 pb-8 max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <div className="w-10 h-1 bg-neutral-600 rounded-full mx-auto mb-4" />
+                    <div className="player-menu-scrim" />
+                    {/* SHEET_MAX_AUDIO: two stacked sections */}
+                    <div className="player-menu-sheet max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="player-menu-sheet-handle" />
                         {sections.map((section, idx) => (
                             <div key={section.title} className={`${idx > 0 ? "mt-4 pt-4 border-t border-white/10" : ""}`}>
                                 <div className="px-2 py-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-500 mb-1">
@@ -1881,7 +1883,7 @@ function MenuOption({ active, onClick, children }: { active: boolean; onClick: (
     return (
         <button
             onClick={onClick}
-            className={`flex w-full items-center justify-between px-3 py-2 text-sm text-left rounded-md transition-colors focus:outline-none focus:ring-0 ${active
+            className={`flex w-full items-center justify-between px-3 py-2 text-sm text-left rounded-lg transition-colors focus:outline-none focus:ring-0 ${active
                 ? "bg-white/10 text-white font-bold"
                 : "text-neutral-400 hover:bg-white/5 hover:text-white"
                 }`}

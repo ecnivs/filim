@@ -8,6 +8,7 @@ export default {
         extend: {
             colors: {
                 background: "#141414",
+                playerSheet: "#1a1a1a",
                 foreground: "#e5e5e5",
                 ncyan: {
                     DEFAULT: "#06b6d4",
@@ -19,6 +20,9 @@ export default {
                     hover: "#232323",
                     light: "#2a2a2a"
                 }
+            },
+            boxShadow: {
+                dialog: "0 16px 60px rgba(0,0,0,0.8)"
             },
             fontFamily: {
                 sans: ["Inter", "system-ui", "sans-serif"]

@@ -58,22 +58,22 @@ export function EpisodesPanel({
     const episodeList = (isMobile: boolean) => (
         <>
             {mode === "episodes" ? (
-                <div className="flex flex-col min-h-0">
+                <div className={`flex flex-col min-h-0 ${isMobile ? "flex-1" : ""}`}>
                     {/* Header for Episodes Mode */}
                     <div className={`flex items-center gap-4 border-b border-white/5 ${isMobile ? "px-4 py-4" : "px-6 py-5"}`}>
                         {filteredSeasons.length > 1 ? (
                             <button
                                 onClick={() => setMode("seasons")}
-                                className="group flex items-center gap-2 text-white transition-colors"
+                                className="group flex items-center gap-2 text-neutral-500 transition-colors hover:text-white"
                                 aria-label="Select season"
                             >
-                                <span className={`${isMobile ? "text-base" : "text-lg"} font-black uppercase tracking-[0.1em]`}>
+                                <span className={`${isMobile ? "text-xs" : "text-xl"} font-black uppercase tracking-[0.2em]`}>
                                     {currentSeason?.title || "Season 1"}
                                 </span>
-                                <ChevronLeft className="h-5 w-5 stroke-[3px] group-hover:text-neutral-400 -rotate-90" />
+                                <ChevronLeft className="h-5 w-5 stroke-[3px] text-neutral-500 group-hover:text-neutral-300 -rotate-90 transition-colors" />
                             </button>
                         ) : (
-                            <span className={`${isMobile ? "text-base" : "text-lg"} font-black uppercase tracking-[0.1em] text-white`}>
+                            <span className={`${isMobile ? "text-xs" : "text-xl"} font-black uppercase tracking-[0.2em] text-neutral-500`}>
                                 {currentSeason?.title || "Episodes"}
                             </span>
                         )}
@@ -145,7 +145,7 @@ export function EpisodesPanel({
                     </div>
                 </div>
             ) : (
-                <div className="flex flex-col min-h-0">
+                <div className={`flex flex-col min-h-0 ${isMobile ? "flex-1" : ""}`}>
                     {/* Header for Seasons Mode */}
                     <div className={`border-b border-white/5 ${isMobile ? "px-4 py-4" : "px-6 py-6"} bg-white/5`}>
                         <h2 className="text-sm font-black text-neutral-500 uppercase tracking-[0.2em]">
@@ -207,7 +207,7 @@ export function EpisodesPanel({
                 leaveTo="opacity-0 scale-95 translate-y-2"
             >
                 <div
-                    className="hidden sm:flex flex-col absolute bottom-full right-0 mb-4 w-[400px] max-h-[70vh] rounded-lg bg-[#141414]/95 backdrop-blur-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10 z-50 overflow-hidden"
+                    className="hidden sm:flex flex-col absolute bottom-full right-0 mb-4 w-[400px] max-h-[70vh] player-menu-popover z-50 overflow-hidden"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {episodeList(false)}
@@ -226,12 +226,13 @@ export function EpisodesPanel({
                 leaveTo="opacity-0 translate-y-full"
             >
                 <div className="sm:hidden fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-                    <div className="absolute inset-0 bg-black/60" />
+                    <div className="player-menu-scrim" />
+                    {/* SHEET_MAX_EPISODES: tall list + optional thumbnails */}
                     <div
-                        className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[#1a1a1a] border-t border-white/10 max-h-[75vh] flex flex-col overflow-hidden"
+                        className="player-menu-sheet max-h-[75vh] min-h-0 overflow-hidden"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="w-10 h-1 bg-neutral-600 rounded-full mx-auto mt-3 mb-1 shrink-0" />
+                        <div className="player-menu-sheet-handle" />
                         {episodeList(true)}
                     </div>
                 </div>

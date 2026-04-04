@@ -34,17 +34,18 @@ export function Modal({ children, onClose, isOpen }: ModalProps) {
 
     if (!isOpen) return null;
 
+    /* Stacking: z-[100] so intercept sits above row expand (z-50); same backdrop recipe as .dialog-overlay-centered. */
     return createPortal(
         <div
             ref={overlayRef}
-            className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm pt-8 sm:pt-12 pb-8 px-4 sm:px-0 scrollbar-none"
+            className="dialog-overlay-intercept"
             onClick={(e) => {
                 if (e.target === overlayRef.current) onClose();
             }}
         >
             <div
                 ref={contentRef}
-                className="relative w-full max-w-4xl min-h-[600px] rounded-xl bg-background shadow-2xl animate-modal-in"
+                className="dialog-panel-shell relative w-full max-w-4xl min-h-[600px] animate-modal-in"
                 onClick={(e) => e.stopPropagation()}
             >
                 <button
