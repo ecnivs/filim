@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,7 +11,10 @@ import httpx
 
 from app.core.config import settings
 from app.core.flaresolverr import flarefetch
+from app.db.cache_store import cache_client
 from app.sources import StreamCandidateModel
+
+_CLOCK_CACHE_TTL = 600  # 10 minutes
 
 
 @dataclass
@@ -36,6 +42,15 @@ class StreamResolver:
         self.yt_dlp_binary = yt_dlp_binary
 
     async def _fetch_clock_json(self, clock_url: str) -> dict:
+        # Check cache first — clock JSON responses are expensive to fetch
+        cache_key = f"filim:clock:{hashlib.md5(clock_url.encode()).hexdigest()}"
+        try:
+            cached = await cache_client.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass
+
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -43,18 +58,28 @@ class StreamResolver:
             ),
             "Referer": settings.allanime_referer,
         }
+        data = None
         try:
             async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.get(clock_url)
                 if resp.status_code != 403:
                     resp.raise_for_status()
-                    return resp.json()
+                    data = resp.json()
         except Exception:
             pass
 
-        data = await flarefetch(clock_url)
+        if data is None:
+            data = await flarefetch(clock_url)
+
         if not data:
             raise StreamResolverError(f"Failed to resolve provider clock URL: {clock_url}")
+
+        # Cache the result
+        try:
+            await cache_client.setex(cache_key, _CLOCK_CACHE_TTL, json.dumps(data))
+        except Exception:
+            logging.warning("Failed to cache clock JSON for %s", clock_url)
+
         return data
 
     async def resolve(

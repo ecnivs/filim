@@ -359,6 +359,7 @@ class AllanimeCatalogAdapter:
         numbers = sorted({str(ep) for ep in detail})
         return [EpisodeSummaryModel(number=n) for n in numbers]
 
+    @cache_response(ttl_seconds=900, response_model=StreamCandidateModel)
     async def get_stream_candidates(
         self,
         show_id: str,
