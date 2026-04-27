@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import html
 import json
 import logging
@@ -8,11 +10,13 @@ from dataclasses import dataclass
 from typing import Any, List, Optional
 
 import httpx
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from pydantic import BaseModel
 
 from app.core.cache import cache_response
 from app.core.config import settings
 from app.core.constants import DEFAULT_USER_AGENT, MODE_SUB, genres_for_upstream_api
+from app.core.flaresolverr import flarefetch
 from app.core.utils import normalize_genre_list
 from app.sources.queries import (
     EPISODE_LIST_QUERY,
@@ -60,33 +64,100 @@ class _AllanimeGraphqlClient:
     timeout: float
 
     async def query(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
-        async with httpx.AsyncClient(
-            base_url=self.base_url,
-            headers={
-                "User-Agent": DEFAULT_USER_AGENT,
-                "Referer": self.referer,
-                "Content-Type": "application/json",
-            },
-            timeout=self.timeout,
-        ) as client:
+        params = {
+            "query": query,
+            "variables": json.dumps(variables, separators=(",", ":")),
+        }
+
+        # Try direct request first (fast path, works when CF isn't challenging)
+        data = await self._direct_query(params)
+        if data:
+            return data
+
+        # Fall back to FlareSolverr (bypasses CF JS challenge)
+        logging.info("Direct request blocked, retrying via FlareSolverr")
+        data = await flarefetch(self.base_url, params)
+        if not data:
+            return {}
+
+        if "errors" in data:
+            logging.error(f"GraphQL returns errors: {data['errors']}")
+            return {}
+
+        inner = data.get("data", {})
+
+        # The API may return encrypted episode data when detecting scraper access.
+        # Decrypt with AES-256-CTR and the known key.
+        tobeparsed = inner.get("tobeparsed")
+        if tobeparsed:
             try:
-                response = await client.get(
-                    "",
-                    params={
-                        "query": query,
-                        "variables": json.dumps(variables, separators=(",", ":")),
-                    },
-                )
-                response.raise_for_status()
-            except httpx.HTTPError as e:
-                logging.error(f"GraphQL request failed: {e}")
+                decrypted = _decrypt_tobeparsed(tobeparsed)
+                return decrypted
+            except Exception as exc:
+                logging.error(f"Failed to decrypt tobeparsed: {exc}")
                 return {}
 
+        return inner
+
+    async def _direct_query(self, params: dict[str, str]) -> dict[str, Any]:
+        origin = self.referer.rstrip("/")
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                headers={
+                    "User-Agent": DEFAULT_USER_AGENT,
+                    "Referer": self.referer,
+                    "Origin": origin,
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Sec-Fetch-Site": "cross-site",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Dest": "empty",
+                },
+                timeout=self.timeout,
+            ) as client:
+                response = await client.get("", params=params)
+                if response.status_code == 403:
+                    return {}
+                response.raise_for_status()
+        except httpx.HTTPError:
+            return {}
+
+        try:
             data = response.json()
-            if "errors" in data:
-                logging.error(f"GraphQL returns errors: {data['errors']}")
-                return {}
-            return data.get("data", {})
+        except Exception:
+            return {}
+
+        if "errors" in data:
+            logging.error(f"GraphQL returns errors: {data['errors']}")
+            return {}
+        return data.get("data", {})
+
+
+_ALLANIME_AES_KEY = hashlib.sha256(b"Xot36i3lK3:v1").digest()
+
+
+def _decrypt_tobeparsed(tobeparsed: str) -> dict[str, Any]:
+    """Decrypt AES-256-CTR encrypted episode data returned by the allanime API."""
+    raw = base64.b64decode(tobeparsed)
+    iv = raw[1:13]
+    ctr_nonce = iv + bytes([0, 0, 0, 2])
+    ct_len = len(raw) - 13 - 16
+    ciphertext = raw[13 : 13 + ct_len]
+    cipher = Cipher(algorithms.AES(_ALLANIME_AES_KEY), modes.CTR(ctr_nonce))
+    decryptor = cipher.decryptor()
+    plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+    return json.loads(plaintext)
+
+
+def _decode_source_url(url: str) -> str:
+    """Decode XOR-obfuscated source URLs (prefix '--' + hex, XOR key 56)."""
+    if url.startswith("--"):
+        try:
+            return bytes(b ^ 56 for b in bytes.fromhex(url[2:])).decode("utf-8")
+        except Exception:
+            return url
+    return url
 
 
 def strip_html(text: str | None) -> str | None:

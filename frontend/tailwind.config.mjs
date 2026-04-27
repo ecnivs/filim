@@ -15,6 +15,11 @@ export default {
                     dark: "#0891b2",
                     light: "#22d3ee"
                 },
+                nred: {
+                    DEFAULT: "#dc2626",
+                    dark: "#b91c1c",
+                    light: "#ef4444"
+                },
                 surface: {
                     DEFAULT: "#181818",
                     hover: "#232323",

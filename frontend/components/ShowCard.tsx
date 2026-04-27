@@ -74,6 +74,10 @@ export function ShowCard({
             className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 ${variant === 'standard' ? 'md:group-hover/row-inner:opacity-30 md:hover:!opacity-100 md:hover:z-50' : ''} cursor-pointer active:scale-[0.97] md:active:scale-100`}
             onClick={handleCardClick}
             onMouseEnter={prefetchDetails}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleCardClick(); }}
+            aria-label={show.title}
         >
             <div className={`relative aspect-[2/3] w-full overflow-hidden rounded-[4px] bg-surface transition-transform duration-300 ease-out ${variant === 'standard' ? 'md:group-hover/card:scale-[1.25] md:group-hover/card:z-30 md:group-hover/card:delay-[100ms]' : ''}`}>
                 {show.poster_image_url && !imageFailed ? (

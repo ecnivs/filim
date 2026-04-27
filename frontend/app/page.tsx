@@ -200,13 +200,20 @@ export default function HomePage() {
                                             href={billboardResumeHref}
                                             className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-6 py-2.5 md:py-2.5 text-sm font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20 min-h-[44px]"
                                         >
-                                            <span className="text-base md:text-lg">▶</span> Play
+                                            <svg viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5 shrink-0" fill="currentColor">
+                                                <path d="M6 4l15 8-15 8V4z" />
+                                            </svg>
+                                            Play
                                         </Link>
                                         <Link
                                             href={`/show/${featuredShow.id}`}
                                             className="flex items-center gap-2 rounded bg-neutral-500/50 px-4 md:px-6 py-2.5 md:py-2.5 text-xs md:text-sm font-bold text-white transition hover:bg-neutral-500/70 backdrop-blur-md min-h-[44px]"
                                         >
-                                            <span className="text-base md:text-lg">ⓘ</span>
+                                            <svg viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="12" y1="16" x2="12" y2="12" />
+                                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                                            </svg>
                                             More Info
                                         </Link>
                                     </div>

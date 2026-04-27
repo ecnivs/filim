@@ -1255,7 +1255,7 @@ export function Player({
                     leaveFrom="opacity-100 translate-y-0"
                     leaveTo="opacity-0 -translate-y-4"
                 >
-                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-3 sm:px-4 sm:px-12 pt-4 sm:pt-8 text-sm">
+                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-3 sm:px-12 pt-4 sm:pt-8 text-sm">
                         <div className="flex items-start gap-3 sm:gap-6">
                             <button
                                 onClick={(e) => {
@@ -1287,7 +1287,7 @@ export function Player({
                                         history.back();
                                     }
                                 }}
-                                className="mt-1 transition-opacity opacity-80 hover:opacity-100 active:scale-95"
+                                className="flex min-h-[44px] min-w-[44px] items-center justify-center transition-opacity opacity-80 hover:opacity-100 active:scale-95"
                                 aria-label="Back"
                             >
                                 <ArrowLeft className="h-6 w-6 sm:h-8 sm:w-8 text-white drop-shadow-md" strokeWidth={2.5} />
@@ -1373,34 +1373,35 @@ export function Player({
                                 setShowSkipIntro(false);
                                 setHasSkippedIntro(true);
                             }}
-                            className="rounded bg-white px-4 py-2 text-xs font-semibold text-black shadow-lg hover:bg-neutral-200"
+                            className="rounded border border-white/30 bg-black/60 backdrop-blur-sm px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-white hover:text-black hover:border-white min-h-[44px] transition-colors"
                         >
-                            Skip intro
+                            Skip Intro
                         </button>
                     </div>
                 )}
 
                 {hasEnded && nextEpisodeHref && (
-                    <div className="pointer-events-auto absolute inset-0 flex items-center justify-end px-6 pb-10">
-                        <div className="max-w-xs rounded-lg bg-black/80 p-4 text-sm shadow-xl backdrop-blur">
-                            <p className="text-xs text-neutral-300">Up next</p>
+                    <div className="pointer-events-auto absolute inset-0 flex items-end sm:items-center justify-center sm:justify-end px-4 sm:px-8 pb-24 sm:pb-0 animate-fade-in">
+                        <div className="w-full max-w-sm rounded-xl bg-black/90 border border-white/10 p-5 shadow-2xl backdrop-blur-md">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ncyan mb-1">Up Next</p>
                             {nextEpisodeLabel && (
-                                <p className="mt-1 text-sm font-semibold text-white">
+                                <p className="text-sm font-bold text-white mb-4 line-clamp-2">
                                     {nextEpisodeLabel}
                                 </p>
                             )}
-                            <div className="mt-3 flex gap-2">
+                            <div className="flex gap-3">
                                 <Link
                                     href={nextEpisodeHref}
                                     replace
-                                    className="inline-flex flex-1 items-center justify-center rounded bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-neutral-200"
+                                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-ncyan px-4 py-3 text-xs font-bold text-black hover:bg-ncyan-light transition-colors min-h-[44px]"
                                 >
-                                    Play next episode
+                                    <SkipForward className="h-4 w-4 fill-current" />
+                                    Play Next
                                 </Link>
                                 <button
                                     type="button"
                                     onClick={() => setHasEnded(false)}
-                                    className="rounded bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
+                                    className="rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white transition-colors min-h-[44px]"
                                 >
                                     Stay
                                 </button>
@@ -1420,14 +1421,15 @@ export function Player({
                     leaveTo="opacity-0 translate-y-8"
                 >
                     <div
-                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-3 pb-3 pt-2 sm:px-4 sm:pb-8 sm:px-12 sm:pb-12"
+                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 sm:px-12 sm:pb-12"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="space-y-3 sm:space-y-6">
-                            <div className="group relative flex items-center py-2 h-8 sm:h-6">
+                            <div className="group relative flex items-center h-12 sm:h-8">
                                 <div
                                     ref={seekBarRef}
-                                    className="relative h-1 w-full flex-1 bg-white/10 transition-all group-hover:h-1.5 rounded-full overflow-visible cursor-pointer"
+                                    className="relative h-1.5 sm:h-1 w-full flex-1 bg-white/10 transition-all group-hover:h-2 sm:group-hover:h-1.5 rounded-full overflow-visible cursor-pointer py-5 -my-5 sm:py-3 sm:-my-3"
+                                    style={{ touchAction: "manipulation" }}
                                     onClick={handleSeekBarClick}
                                     onMouseDown={handleSeekBarMouseDown}
                                 >
@@ -1444,17 +1446,18 @@ export function Player({
                                         style={{ left: `${effectivePercent}%`, transform: `translate(-50%, -50%)` }}
                                     />
                                 </div>
-                                <div className="ml-4 tabular-nums text-xs font-medium text-white/80">
-                                    {formatTime(duration - currentTime)}
+                                <div className="ml-3 tabular-nums text-xs font-medium text-white/80 whitespace-nowrap">
+                                    <span className="hidden sm:inline">{formatTime(currentTime)} / </span>
+                                    <span className="text-white/50">-{formatTime(duration - currentTime)}</span>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
-                                <div className="flex items-center gap-2 sm:gap-4 sm:gap-6 justify-start">
+                                <div className="flex items-center gap-2 sm:gap-6 justify-start">
                                     <button
                                         type="button"
                                         onClick={togglePlay}
-                                        className="group flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
+                                        className="group flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
                                         aria-label={isPlaying ? "Pause" : "Play"}
                                     >
                                         {isPlaying ? (
@@ -1468,7 +1471,7 @@ export function Player({
                                         <button
                                             type="button"
                                             onClick={() => seekRelative(-10)}
-                                            className="group relative flex items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
+                                            className="group relative flex h-11 w-11 sm:h-auto sm:w-auto items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
                                             aria-label="Rewind 10 seconds"
                                         >
                                             <RotateCcw className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
@@ -1477,7 +1480,7 @@ export function Player({
                                         <button
                                             type="button"
                                             onClick={() => seekRelative(10)}
-                                            className="group relative flex items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
+                                            className="group relative flex h-11 w-11 sm:h-auto sm:w-auto items-center justify-center transition-all hover:scale-110 active:scale-90 focus:outline-none focus:ring-0"
                                             aria-label="Forward 10 seconds"
                                         >
                                             <RotateCw className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
@@ -1517,14 +1520,14 @@ export function Player({
                                         <span className="text-[8px] sm:text-[10px] sm:text-xs font-bold text-neutral-400 uppercase tracking-[0.15em] opacity-80 hidden sm:block">
                                             {title}
                                         </span>
-                                        <span className="text-[10px] sm:text-xs sm:text-sm font-semibold text-white tracking-wide truncate max-w-[120px] sm:max-w-[250px] sm:max-w-xl">
+                                        <span className="text-[10px] sm:text-sm font-semibold text-white tracking-wide truncate max-w-[120px] sm:max-w-xl">
                                             {episodeLabel}
                                         </span>
                                     </div>
                                 </div>
 
                                 <div
-                                    className="flex items-center gap-1.5 sm:gap-3 sm:gap-5 justify-end"
+                                    className="flex items-center gap-1.5 sm:gap-5 justify-end"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     {!isMovie && (
@@ -1532,7 +1535,7 @@ export function Player({
                                             <Link
                                                 href={nextEpisodeHref || "#"}
                                                 replace
-                                                className={`flex items-center justify-center p-2 text-white transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-0 ${!nextEpisodeHref ? "opacity-20 grayscale pointer-events-none" : "hover:text-white"}`}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center p-2 text-white transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-0 ${!nextEpisodeHref ? "opacity-20 grayscale pointer-events-none" : "hover:text-white"}`}
                                             >
                                                 <SkipForward className="h-5 w-5 sm:h-7 sm:w-7 fill-current" />
                                             </Link>
@@ -1557,7 +1560,7 @@ export function Player({
                                                         else setActiveMenu("episodes");
                                                         onShowEpisodes?.();
                                                     }}
-                                                    className={`flex items-center gap-2 rounded-full p-2 text-white transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-0 ${activeMenu === "episodes" ? "text-ncyan" : ""}`}
+                                                    className={`flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full p-2 text-white transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-0 ${activeMenu === "episodes" ? "text-ncyan" : ""}`}
                                                     aria-label="Episodes"
                                                 >
                                                     <Layers className="h-5 w-5 sm:h-7 sm:w-7" />
@@ -1627,34 +1630,32 @@ export function Player({
                                         />
                                     )}
 
-                                    <div className="hidden sm:block">
-                                        <Menu
-                                            label="Playback Speed"
-                                            icon={<Gauge className="h-7 w-7" />}
-                                            value={playbackSpeed.toString()}
-                                            options={[
-                                                { id: "0.5", label: "0.5x" },
-                                                { id: "0.75", label: "0.75x" },
-                                                { id: "1", label: "Normal" },
-                                                { id: "1.25", label: "1.25x" },
-                                                { id: "1.5", label: "1.5x" },
-                                                { id: "2", label: "2x" }
-                                            ]}
-                                            onChange={(id) => changePlaybackSpeed(Number(id))}
-                                            isOpen={activeMenu === "speed"}
-                                            onToggle={(open) => {
-                                                if (open) setActiveMenu("speed");
-                                                else if (activeMenu === "speed") setActiveMenu(null);
-                                            }}
-                                            activeIds={[playbackSpeed.toString()]}
-                                        />
-                                    </div>
+                                    <Menu
+                                        label="Playback Speed"
+                                        icon={<Gauge className="h-5 w-5 sm:h-7 sm:w-7" />}
+                                        value={playbackSpeed.toString()}
+                                        options={[
+                                            { id: "0.5", label: "0.5x" },
+                                            { id: "0.75", label: "0.75x" },
+                                            { id: "1", label: "Normal" },
+                                            { id: "1.25", label: "1.25x" },
+                                            { id: "1.5", label: "1.5x" },
+                                            { id: "2", label: "2x" }
+                                        ]}
+                                        onChange={(id) => changePlaybackSpeed(Number(id))}
+                                        isOpen={activeMenu === "speed"}
+                                        onToggle={(open) => {
+                                            if (open) setActiveMenu("speed");
+                                            else if (activeMenu === "speed") setActiveMenu(null);
+                                        }}
+                                        activeIds={[playbackSpeed.toString()]}
+                                    />
 
                                     {!isMobileDevice && (
                                         <button
                                             type="button"
                                             onClick={toggleFullscreen}
-                                            className="text-white transition-transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-0"
+                                            className="flex min-h-[44px] min-w-[44px] items-center justify-center text-white transition-transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-0"
                                             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                                         >
                                             {isFullscreen ? (
@@ -1720,11 +1721,12 @@ function Menu({
         >
             <button
                 type="button"
+                aria-label={label}
                 onClick={(e) => {
                     e.stopPropagation();
                     onToggle(!isOpen);
                 }}
-                className={`flex items-center gap-2 rounded-full p-2 text-white transition-all focus:outline-none focus:ring-0 ${noScale ? "" : "hover:scale-110"}`}
+                className={`flex items-center gap-2 rounded-full p-2 text-white transition-all focus:outline-none focus:ring-0 min-h-[44px] min-w-[44px] justify-center ${noScale ? "" : "hover:scale-110"}`}
             >
                 {icon}
             </button>
@@ -1837,7 +1839,7 @@ function TwoColumnMenu({
                     e.stopPropagation();
                     onToggle(!isOpen);
                 }}
-                className="flex items-center gap-2 rounded-full p-2 text-white transition-all hover:scale-110 focus:outline-none focus:ring-0"
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full p-2 text-white transition-all hover:scale-110 focus:outline-none focus:ring-0"
             >
                 {icon}
             </button>

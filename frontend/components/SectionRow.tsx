@@ -84,7 +84,7 @@ export function SectionRow({
                     <div
                         ref={scrollRef}
                         onScroll={checkScroll}
-                        className="flex gap-2 md:gap-1.5 overflow-x-auto overflow-y-clip scrollbar-none px-[4%] py-6 md:py-10 -my-6 md:-my-10 scroll-smooth"
+                        className="group/row-inner flex gap-2 md:gap-1.5 overflow-x-auto overflow-y-clip scrollbar-none px-[4%] py-6 md:py-10 -my-6 md:-my-10 scroll-smooth"
                     >
                         {children}
                     </div>
@@ -94,14 +94,18 @@ export function SectionRow({
                         className={`absolute left-0 top-0 bottom-0 z-40 hidden md:flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showLeft ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
                         aria-label="Scroll left"
                     >
-                        <span className="text-3xl text-white hover:scale-125 transition-transform">‹</span>
+                        <svg viewBox="0 0 24 24" className="w-8 h-8 text-white hover:scale-125 transition-transform drop-shadow-lg" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M15 18l-6-6 6-6" />
+                        </svg>
                     </button>
                     <button
                         onClick={() => scroll("right")}
                         className={`absolute right-0 top-0 bottom-0 z-40 hidden md:flex w-[4%] items-center justify-center transition-opacity duration-300 opacity-0 disabled:hidden ${showRight ? "group-hover/row:opacity-100" : "pointer-events-none"}`}
                         aria-label="Scroll right"
                     >
-                        <span className="text-3xl text-white hover:scale-125 transition-transform">›</span>
+                        <svg viewBox="0 0 24 24" className="w-8 h-8 text-white hover:scale-125 transition-transform drop-shadow-lg" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
                     </button>
                 </div>
             </section>
@@ -114,9 +118,12 @@ export function SectionRow({
                             <button
                                 type="button"
                                 onClick={() => setIsOpen(false)}
-                                className="h-9 w-9 rounded-full bg-surface-light flex items-center justify-center text-sm text-neutral-300 hover:bg-neutral-600 hover:text-white transition-colors"
+                                aria-label="Close"
+                                className="h-9 w-9 rounded-full bg-surface-light flex items-center justify-center text-neutral-300 hover:bg-neutral-600 hover:text-white transition-colors"
                             >
-                                ✕
+                                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+                                </svg>
                             </button>
                         </div>
                         <div className="relative flex-1 overflow-y-auto px-6 py-8">

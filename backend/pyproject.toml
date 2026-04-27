@@ -22,6 +22,7 @@ dependencies = [
   "alembic>=1.13.0",
   "python-dotenv>=1.0.1",
   "m3u8>=5.0.0",
+  "curl-cffi>=0.15.0",
 ]
 
 [project.optional-dependencies]

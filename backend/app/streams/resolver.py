@@ -7,6 +7,7 @@ from typing import Optional
 import httpx
 
 from app.core.config import settings
+from app.core.flaresolverr import flarefetch
 from app.sources import StreamCandidateModel
 
 
@@ -34,6 +35,28 @@ class StreamResolver:
     def __init__(self, yt_dlp_binary: str = "yt-dlp") -> None:
         self.yt_dlp_binary = yt_dlp_binary
 
+    async def _fetch_clock_json(self, clock_url: str) -> dict:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+            ),
+            "Referer": settings.allanime_referer,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+                resp = await client.get(clock_url)
+                if resp.status_code != 403:
+                    resp.raise_for_status()
+                    return resp.json()
+        except Exception:
+            pass
+
+        data = await flarefetch(clock_url)
+        if not data:
+            raise StreamResolverError(f"Failed to resolve provider clock URL: {clock_url}")
+        return data
+
     async def resolve(
         self, candidate: StreamCandidateModel, preferred_quality: Optional[str] = None
     ) -> ResolvedStream:
@@ -56,25 +79,7 @@ class StreamResolver:
             elif "/clock" in clock_url and "/clock.json" not in clock_url:
                 clock_url = clock_url.replace("/clock", "/clock.json")
 
-            try:
-                async with httpx.AsyncClient(
-                    timeout=30.0,
-                    headers={
-                        "User-Agent": (
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) "
-                            "Gecko/20100101 Firefox/121.0"
-                        ),
-                        "Referer": settings.allanime_referer,
-                    },
-                ) as client:
-                    resp = await client.get(clock_url)
-                    resp.raise_for_status()
-            except httpx.HTTPError as exc:
-                raise StreamResolverError(
-                    f"Failed to resolve provider clock URL: {exc}"
-                ) from exc
-
-            data = resp.json()
+            data = await self._fetch_clock_json(clock_url)
             links = data.get("links") or []
             if not links:
                 raise StreamResolverError("Provider clock JSON contained no links")
