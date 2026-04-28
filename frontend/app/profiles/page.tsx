@@ -73,6 +73,7 @@ export default function ProfilesPage() {
             setPinError(null);
             setUnlockingProfile(null);
             setPinInput("");
+            sessionStorage.setItem(`filim.pinVerified.${variables.profile.id}`, "1");
             setProfile({
                 id: variables.profile.id,
                 name: variables.profile.name,
