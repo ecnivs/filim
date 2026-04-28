@@ -46,11 +46,25 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
                         if (res.ok) {
                             const data = await res.json();
                             if (data.is_locked) {
-                                // Locked profile in storage means the tab/browser
-                                // was closed after unlocking. Require PIN again on
-                                // fresh load — no session token to prove prior auth.
-                                window.localStorage.removeItem(STORAGE_KEY);
-                                setProfileState(null);
+                                // Locked profile requires PIN. Allow if the user
+                                // already authenticated this tab session (flag set
+                                // in sessionStorage by the PIN dialog on success).
+                                // sessionStorage survives hard reloads but clears
+                                // when the tab is closed, so PIN is required once
+                                // per tab session.
+                                const verified = sessionStorage.getItem(
+                                    `filim.pinVerified.${parsed.id}`
+                                );
+                                if (!verified) {
+                                    window.localStorage.removeItem(STORAGE_KEY);
+                                    setProfileState(null);
+                                } else {
+                                    setProfileState({
+                                        id: data.id,
+                                        name: data.name,
+                                        is_guest: data.is_guest
+                                    });
+                                }
                             } else {
                                 setProfileState({
                                     id: data.id,
