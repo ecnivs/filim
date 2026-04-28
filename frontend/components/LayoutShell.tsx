@@ -259,34 +259,47 @@ const AVATAR_COLORS = [
 
 function ProfileDropdownItems({ currentId }: { currentId?: string }) {
     const { setProfile } = useProfile();
+    const router = useRouter();
 
     const { data: profiles } = useQuery({
         queryKey: ["profiles"],
         queryFn: async () => {
-            const res = await api.get<{ items: { id: string, name: string, is_guest: boolean }[] }>("/profiles");
+            const res = await api.get<{ items: { id: string; name: string; is_guest: boolean; is_locked: boolean }[] }>("/profiles");
             return res.data.items;
         }
     });
 
     const others = profiles?.filter(p => p.id !== currentId) || [];
 
+    const handleSwitch = (p: { id: string; name: string; is_guest: boolean; is_locked: boolean }) => {
+        if (p.is_locked) {
+            // Locked profiles must go through the PIN dialog on /profiles.
+            router.push("/profiles");
+            return;
+        }
+        setProfile({ id: p.id, name: p.name, is_guest: p.is_guest });
+        window.location.href = "/";
+    };
+
     return (
         <div className="space-y-1">
             {others.map((p, i) => (
                 <button
                     key={p.id}
-                    onClick={() => {
-                        setProfile({ id: p.id, name: p.name, is_guest: p.is_guest });
-                        window.location.href = "/";
-                    }}
+                    onClick={() => handleSwitch(p)}
                     className="w-full flex items-center gap-2 group/item px-1 py-1 rounded hover:bg-white/5 transition-colors"
                 >
                     <div className={`h-6 w-6 rounded bg-gradient-to-br ${AVATAR_COLORS[(i + 1) % AVATAR_COLORS.length]} flex items-center justify-center text-[10px] font-bold text-white`}>
                         {p.name.slice(0, 1).toUpperCase()}
                     </div>
-                    <span className="text-xs font-medium text-neutral-400 group-hover/item:text-white transition-colors">
+                    <span className="text-xs font-medium text-neutral-400 group-hover/item:text-white transition-colors truncate">
                         {p.name}
                     </span>
+                    {p.is_locked && (
+                        <svg viewBox="0 0 24 24" className="ml-auto w-3 h-3 shrink-0 text-neutral-600" fill="currentColor">
+                            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                        </svg>
+                    )}
                 </button>
             ))}
         </div>

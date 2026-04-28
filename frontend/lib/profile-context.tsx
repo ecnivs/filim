@@ -45,11 +45,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
                         if (res.ok) {
                             const data = await res.json();
-                            setProfileState({
-                                id: data.id,
-                                name: data.name,
-                                is_guest: data.is_guest
-                            });
+                            if (data.is_locked) {
+                                // Locked profile in storage means the tab/browser
+                                // was closed after unlocking. Require PIN again on
+                                // fresh load — no session token to prove prior auth.
+                                window.localStorage.removeItem(STORAGE_KEY);
+                                setProfileState(null);
+                            } else {
+                                setProfileState({
+                                    id: data.id,
+                                    name: data.name,
+                                    is_guest: data.is_guest
+                                });
+                            }
                         } else {
                             window.localStorage.removeItem(STORAGE_KEY);
                             setProfileState(null);
