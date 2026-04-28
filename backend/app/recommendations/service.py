@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from collections import Counter
+from datetime import datetime, timezone
 from typing import List
 
 from pydantic import BaseModel
@@ -10,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.service import CatalogService
-from app.models import ProfileListEntry, Show, ShowStats
+from app.models import ProfileListEntry, Show, ShowStats, WatchProgress
 from app.sources import ShowSummaryModel
 
 # Module-level genre cache — recomputed every 5 min across all requests in worker.
@@ -22,6 +24,17 @@ class RecommendationSectionModel(BaseModel):
     id: str
     title: str
     items: list[ShowSummaryModel]
+
+
+def _seeded_shuffle(items: list, seed: str) -> list:
+    """Deterministic Fisher-Yates shuffle using a string seed (LCG PRNG)."""
+    items = list(items)
+    h = int(hashlib.md5(seed.encode()).hexdigest(), 16)
+    for i in range(len(items) - 1, 0, -1):
+        h = (h * 1664525 + 1013904223) & 0xFFFFFFFF
+        j = h % (i + 1)
+        items[i], items[j] = items[j], items[i]
+    return items
 
 
 class RecommendationService:
@@ -117,24 +130,57 @@ class RecommendationService:
 
         return RecommendationSectionModel(id="my_list", title="My List", items=items)
 
+    async def _profile_genre_counts(self, profile_id: str) -> Counter[str]:
+        """Genre counts derived from this profile's watch history."""
+        try:
+            stmt = (
+                select(WatchProgress.show_id)
+                .where(WatchProgress.profile_id == profile_id)
+                .distinct()
+            )
+            result = await self.db.execute(stmt)
+            watched_ids = [row[0] for row in result.all()]
+        except Exception:
+            return Counter()
+
+        if not watched_ids:
+            return Counter()
+
+        try:
+            stmt = select(Show.genres).where(Show.source_id.in_(watched_ids))
+            result = await self.db.execute(stmt)
+            counts: Counter[str] = Counter()
+            for row in result.scalars().all():
+                if row:
+                    counts.update([g.strip().title() for g in row if g.strip()])
+            return counts
+        except Exception:
+            return Counter()
+
+    async def _global_genre_counts(self) -> Counter[str]:
+        counts: Counter[str] = Counter()
+        try:
+            result = await self.db.execute(select(Show.genres))
+            for row in result.scalars().all():
+                if row:
+                    counts.update([g.strip().title() for g in row if g.strip()])
+        except Exception:
+            pass
+        return counts
+
     async def get_for_you_section(
         self, profile_id: str | None = None
     ) -> RecommendationSectionModel:
+        # Prefer profile watch-history genres; fall back to global distribution.
         genre_counts: Counter[str] = Counter()
-
-        try:
-            stmt = select(Show.genres)
-            result = await self.db.execute(stmt)
-            for row in result.scalars().all():
-                if row:
-                    genre_counts.update([g.strip().title() for g in row if g.strip()])
-        except Exception:
-            pass
+        if profile_id:
+            genre_counts = await self._profile_genre_counts(profile_id)
+        if not genre_counts:
+            genre_counts = await self._global_genre_counts()
 
         if genre_counts:
             top_genre = genre_counts.most_common(1)[0][0]
             filtered = await self.catalog.search(query="", genres=[top_genre], page=1)
-
             if len(filtered) >= 5:
                 return RecommendationSectionModel(
                     id="for_you",
@@ -144,7 +190,6 @@ class RecommendationService:
 
         popular = await self.catalog.source.get_popular_shows(limit=50)
         offset_items = popular[10:30] if len(popular) > 10 else popular
-
         return RecommendationSectionModel(
             id="for_you",
             title="Recommended for you",
@@ -155,8 +200,7 @@ class RecommendationService:
         counts: Counter[str] = Counter()
 
         try:
-            stmt = select(Show.genres)
-            result = await self.db.execute(stmt)
+            result = await self.db.execute(select(Show.genres))
             for row in result.scalars().all():
                 if row:
                     counts.update([g.strip().title() for g in row if g.strip()])
@@ -185,7 +229,9 @@ class RecommendationService:
 
         return dynamic or ["Action", "Adventure", "Comedy"]
 
-    async def _get_dynamic_genres(self, exclude: List[str] | None = None) -> List[str]:
+    async def _get_dynamic_genres(
+        self, exclude: List[str] | None = None, profile_id: str | None = None
+    ) -> List[str]:
         global _genres_cache
         now = time.monotonic()
 
@@ -196,7 +242,13 @@ class RecommendationService:
             genres = _genres_cache[0]
 
         exclude_set = {g.strip().title() for g in (exclude or [])}
-        return [g for g in genres if g not in exclude_set]
+        genres = [g for g in genres if g not in exclude_set]
+
+        # Shuffle deterministically per profile per day so different profiles
+        # and different days yield different discovery orderings.
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        seed = f"{profile_id or 'guest'}:{today}"
+        return _seeded_shuffle(genres, seed)
 
     async def get_discovery_sections(
         self,
@@ -208,25 +260,19 @@ class RecommendationService:
         try:
             for_you = await self.get_for_you_section(profile_id=profile_id)
             if "Recommended for " in for_you.title:
-                genre_counts: Counter[str] = Counter()
-                stmt = select(Show.genres)
-                result = await self.db.execute(stmt)
-                for row in result.scalars().all():
-                    if row:
-                        genre_counts.update(
-                            [g.strip().title() for g in row if g.strip()]
-                        )
+                genre_counts = await self._global_genre_counts()
                 if genre_counts:
                     exclude_genres.append(genre_counts.most_common(1)[0][0])
         except Exception:
             pass
 
-        genres = await self._get_dynamic_genres(exclude=exclude_genres)
+        genres = await self._get_dynamic_genres(
+            exclude=exclude_genres, profile_id=profile_id
+        )
 
         if cursor >= len(genres) or not genres:
             return [], None
 
-        # Fetch limit*2 genres concurrently to have buffer for empty results.
         batch_size = min(limit * 2, 10)
         end = min(cursor + batch_size, len(genres))
         batch = genres[cursor:end]
@@ -278,15 +324,11 @@ class RecommendationService:
             if profile and profile.is_guest:
                 is_guest = True
 
-        # Build coroutines in display order, run all concurrently.
         coros = []
-        include_for_you = not is_guest
-        include_my_list = bool(profile_id and not is_guest)
-
-        if include_for_you:
+        if not is_guest:
             coros.append(self.get_for_you_section(profile_id=profile_id))
         coros.append(self.get_trending_section())
-        if include_my_list:
+        if profile_id and not is_guest:
             coros.append(self.get_my_list_section(profile_id=profile_id))
 
         results = await asyncio.gather(*coros, return_exceptions=True)

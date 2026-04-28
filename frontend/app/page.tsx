@@ -67,7 +67,7 @@ export default function HomePage() {
     });
 
     const discovery = useInfiniteQuery({
-        queryKey: ["discovery"],
+        queryKey: ["discovery", profile?.id],
         queryFn: async ({ pageParam = 0 }) => {
             const res = await api.get<DiscoveryPage>(
                 "/user/recommendations/discovery",
@@ -135,15 +135,26 @@ export default function HomePage() {
 
     const { handleToggleList, isInList } = usePreferences();
 
-    const featuredShow = (() => {
-        const candidates = [
-            ...(recommendations.data?.flatMap((s) => s.items) || [])
-        ];
-        const withBanners = candidates.filter((a) => a.banner_image_url && a.banner_image_url.startsWith("http"));
-        const withPosters = candidates.filter((a) => a.poster_image_url && a.poster_image_url.startsWith("http"));
+    const featuredShow = useMemo(() => {
+        const inProgressIds = new Set(continueWatching.data?.map((i) => i.show_id) ?? []);
+        const candidates = recommendations.data?.flatMap((s) => s.items) ?? [];
 
-        return withBanners[0] || withPosters[0];
-    })();
+        const withBanners = candidates.filter(
+            (a) => a.banner_image_url?.startsWith("http") && !inProgressIds.has(a.id)
+        );
+        const withPosters = candidates.filter(
+            (a) => a.poster_image_url?.startsWith("http") && !inProgressIds.has(a.id)
+        );
+        const pool = withBanners.length > 0 ? withBanners : withPosters;
+        if (pool.length === 0) return undefined;
+
+        // Rotate daily, vary by profile — stable within a session.
+        const dayIndex = Math.floor(Date.now() / 86_400_000);
+        const profileSeed = profile?.id
+            ? profile.id.charCodeAt(0) + profile.id.charCodeAt(profile.id.length - 1)
+            : 0;
+        return pool[(dayIndex + profileSeed) % Math.min(pool.length, 5)];
+    }, [recommendations.data, continueWatching.data, profile?.id]);
 
     const billboardResumeHref = (() => {
         if (!featuredShow) return "#";
