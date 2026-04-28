@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -15,10 +16,17 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        from app.core.warmup import run_warmup
         from app.db.cache_store import cache_client
 
         await cache_client.start_cleanup()
+        warmup_task = asyncio.create_task(run_warmup())
         yield
+        warmup_task.cancel()
+        try:
+            await warmup_task
+        except (asyncio.CancelledError, Exception):
+            pass
         await cache_client.stop_cleanup()
 
     app = FastAPI(
