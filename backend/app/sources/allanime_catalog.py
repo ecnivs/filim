@@ -234,8 +234,10 @@ class AllanimeCatalogAdapter:
 
             thumb = edge.get("thumbnail") or None
             if thumb and not thumb.startswith("http"):
-                base = settings.allanime_api_url.rsplit("/api", 1)[0]
-                thumb = f"{base}/{thumb.lstrip('/')}"
+                # Relative mcovers paths resolve to api.allanime.day which
+                # is blocked by Cloudflare.  Drop them — the catalog
+                # service will fall back to AniList poster URLs from the DB.
+                thumb = None
             source_id = edge.get("_id")
             title = edge.get("englishName") or edge.get("name") or ""
             results.append(
@@ -291,8 +293,7 @@ class AllanimeCatalogAdapter:
 
             thumb = edge.get("thumbnail") or None
             if thumb and not thumb.startswith("http"):
-                base = settings.allanime_api_url.rsplit("/api", 1)[0]
-                thumb = f"{base}/{thumb.lstrip('/')}"
+                thumb = None
             source_id = edge.get("_id")
             title = edge.get("englishName") or edge.get("name") or ""
             results.append(
@@ -338,8 +339,7 @@ class AllanimeCatalogAdapter:
 
         thumb = show.get("thumbnail") or None
         if thumb and not thumb.startswith("http"):
-            base = settings.allanime_api_url.rsplit("/api", 1)[0]
-            thumb = f"{base}/{thumb.lstrip('/')}"
+            thumb = None
         source_id = show.get("_id")
         title = show.get("englishName") or show.get("name") or ""
         return ShowSummaryModel(

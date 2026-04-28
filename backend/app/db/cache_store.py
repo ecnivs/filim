@@ -58,7 +58,7 @@ class PersistentCache:
 
     async def _get_db(self) -> aiosqlite.Connection:
         if self._db is None:
-            self._db = await aiosqlite.connect(_db_path())
+            self._db = await aiosqlite.connect(_db_path(), timeout=30)
         return self._db
 
     async def _bootstrap(self) -> None:
@@ -66,6 +66,7 @@ class PersistentCache:
         db = await self._get_db()
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA synchronous=NORMAL")
+        await db.execute("PRAGMA busy_timeout=5000")
         await db.execute(
             """
             CREATE TABLE IF NOT EXISTS cache (
