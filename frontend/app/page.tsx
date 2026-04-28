@@ -165,7 +165,7 @@ export default function HomePage() {
         return `/watch/${featuredShow.id}/1`;
     })();
 
-    const isInitialLoading = recommendations.isLoading || discovery.isLoading;
+    const isInitialLoading = recommendations.isLoading;
 
     return (
         <div className="min-h-screen">

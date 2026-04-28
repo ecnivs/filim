@@ -1553,7 +1553,7 @@ export function Player({
 
                                 <div className="flex flex-col items-center justify-center text-center px-2 sm:px-4 overflow-hidden">
                                     <div className="flex flex-col items-center justify-center text-center gap-0.5 sm:gap-1">
-                                        <span className="text-[8px] sm:text-[10px] sm:text-xs font-bold text-neutral-400 uppercase tracking-[0.15em] opacity-80 hidden sm:block">
+                                        <span className="text-[8px] sm:text-xs font-bold text-neutral-400 uppercase tracking-[0.15em] opacity-80 hidden sm:block">
                                             {title}
                                         </span>
                                         <span className="text-[10px] sm:text-sm font-semibold text-white tracking-wide truncate max-w-[120px] sm:max-w-xl">
@@ -1606,7 +1606,7 @@ export function Player({
                                                     showId={showId || ""}
                                                     showTitle={title || "Episodes"}
                                                     episodes={episodes || []}
-                                                    currentEpisode={episodeLabel || ""}
+                                                    currentEpisode={progressEpisodeKey || ""}
                                                     isOpen={activeMenu === "episodes"}
                                                     onClose={() => setActiveMenu(null)}
                                                     seasons={seasons}
