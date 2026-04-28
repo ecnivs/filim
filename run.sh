@@ -25,7 +25,7 @@ fuser -k 3000/tcp 2>/dev/null || true
 
 # 2. Start Services
 echo "Starting backend and frontend..."
-(cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) &
+(cd backend && uvicorn app.main:app --workers 4 --host 0.0.0.0 --port 8000) &
 PIDS+=($!)
 
 (cd frontend && npm run dev) &

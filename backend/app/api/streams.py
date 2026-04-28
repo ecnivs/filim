@@ -26,6 +26,13 @@ _FORWARD_RESPONSE_HEADERS = {
     "etag",
 }
 
+# Shared client reuses TCP connections across proxy requests.
+_proxy_client = httpx.AsyncClient(
+    timeout=30.0,
+    follow_redirects=True,
+    limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+)
+
 router = APIRouter()
 
 
@@ -72,22 +79,15 @@ async def proxy_stream(request: Request, url: str = Query(...)) -> StreamingResp
     if range_header:
         upstream_headers["Range"] = range_header
 
-    client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
-
     async def _stream():
-        try:
-            async with client.stream("GET", target_url, headers=upstream_headers) as resp:
-                async for chunk in resp.aiter_bytes(chunk_size=65536):
-                    yield chunk
-        finally:
-            await client.aclose()
+        async with _proxy_client.stream("GET", target_url, headers=upstream_headers) as resp:
+            async for chunk in resp.aiter_bytes(chunk_size=65536):
+                yield chunk
 
     try:
-        # Send a HEAD first to get status + headers without body
-        head_resp = await client.head(target_url, headers=upstream_headers)
+        head_resp = await _proxy_client.head(target_url, headers=upstream_headers)
         status = head_resp.status_code
         if status >= 400:
-            await client.aclose()
             raise HTTPException(status_code=status, detail="Upstream returned error")
         forward = {
             k: v
@@ -97,7 +97,6 @@ async def proxy_stream(request: Request, url: str = Query(...)) -> StreamingResp
     except HTTPException:
         raise
     except Exception as exc:
-        await client.aclose()
         raise HTTPException(status_code=502, detail=f"Proxy error: {exc}") from exc
 
     return StreamingResponse(

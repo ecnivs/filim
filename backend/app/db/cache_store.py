@@ -7,6 +7,9 @@ upstream through FlareSolverr.
 On first access the L2 table is created (if needed) and all non-expired
 rows are loaded into L1.  Every write goes to both tiers.  A background
 task periodically prunes expired entries from both layers.
+
+A single persistent aiosqlite connection is kept open for the worker's
+lifetime, avoiding the overhead of open/close on every cache operation.
 """
 
 from __future__ import annotations
@@ -32,8 +35,8 @@ class PersistentCache:
     """Two-tier cache backed by SQLite for cross-restart persistence."""
 
     def __init__(self) -> None:
-        # key -> (value, expires_at unix timestamp)
         self._l1: Dict[str, Tuple[str, float]] = {}
+        self._db: Optional[aiosqlite.Connection] = None
         self._initialized: bool = False
         self._init_lock: Optional[asyncio.Lock] = None
         self._cleanup_task: Optional[asyncio.Task] = None
@@ -45,7 +48,6 @@ class PersistentCache:
     async def _ensure_init(self) -> None:
         if self._initialized:
             return
-        # Lazy-create a lock bound to the current event loop
         if self._init_lock is None:
             self._init_lock = asyncio.Lock()
         async with self._init_lock:
@@ -54,40 +56,42 @@ class PersistentCache:
             await self._bootstrap()
             self._initialized = True
 
+    async def _get_db(self) -> aiosqlite.Connection:
+        if self._db is None:
+            self._db = await aiosqlite.connect(_db_path())
+        return self._db
+
     async def _bootstrap(self) -> None:
-        """Create figure and hydrate L1 from L2."""
-        db_file = _db_path()
-        async with aiosqlite.connect(db_file) as db:
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute("PRAGMA synchronous=NORMAL")
-            await db.execute(
-                """
-                CREATE TABLE IF NOT EXISTS cache (
-                    key        TEXT PRIMARY KEY,
-                    value      TEXT NOT NULL,
-                    expires_at REAL NOT NULL
-                )
-                """
+        """Create schema and hydrate L1 from L2."""
+        db = await self._get_db()
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA synchronous=NORMAL")
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cache (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                expires_at REAL NOT NULL
             )
-            await db.execute(
-                "CREATE INDEX IF NOT EXISTS idx_cache_exp ON cache(expires_at)"
-            )
-            await db.commit()
+            """
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cache_exp ON cache(expires_at)"
+        )
+        await db.commit()
 
-            # Hydrate L1 with all live entries
-            now = time.time()
-            cursor = await db.execute(
-                "SELECT key, value, expires_at FROM cache WHERE expires_at > ?",
-                (now,),
-            )
-            rows = await cursor.fetchall()
-            for key, value, exp in rows:
-                self._l1[key] = (value, exp)
-            logger.info("Cache: loaded %d entries from disk", len(rows))
+        now = time.time()
+        cursor = await db.execute(
+            "SELECT key, value, expires_at FROM cache WHERE expires_at > ?",
+            (now,),
+        )
+        rows = await cursor.fetchall()
+        for key, value, exp in rows:
+            self._l1[key] = (value, exp)
+        logger.info("Cache: loaded %d entries from disk", len(rows))
 
-            # Clean out stale rows
-            await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
-            await db.commit()
+        await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
+        await db.commit()
 
     # ------------------------------------------------------------------
     # Public API (matches the old InMemoryCache interface)
@@ -97,7 +101,6 @@ class PersistentCache:
         await self._ensure_init()
         now = time.time()
 
-        # L1 lookup
         entry = self._l1.get(key)
         if entry is not None:
             value, exp = entry
@@ -108,14 +111,14 @@ class PersistentCache:
 
         # L2 lookup (another process may have written)
         try:
-            async with aiosqlite.connect(_db_path()) as db:
-                cursor = await db.execute(
-                    "SELECT value, expires_at FROM cache WHERE key = ?", (key,)
-                )
-                row = await cursor.fetchone()
-                if row and row[1] > now:
-                    self._l1[key] = (row[0], row[1])
-                    return row[0]
+            db = await self._get_db()
+            cursor = await db.execute(
+                "SELECT value, expires_at FROM cache WHERE key = ?", (key,)
+            )
+            row = await cursor.fetchone()
+            if row and row[1] > now:
+                self._l1[key] = (row[0], row[1])
+                return row[0]
         except Exception:
             logger.exception("Cache L2 read error for key: %s", key)
 
@@ -125,18 +128,16 @@ class PersistentCache:
         await self._ensure_init()
         expires_at = time.time() + seconds
 
-        # L1
         self._l1[key] = (value, expires_at)
 
-        # L2
         try:
-            async with aiosqlite.connect(_db_path()) as db:
-                await db.execute(
-                    "INSERT OR REPLACE INTO cache (key, value, expires_at) "
-                    "VALUES (?, ?, ?)",
-                    (key, value, expires_at),
-                )
-                await db.commit()
+            db = await self._get_db()
+            await db.execute(
+                "INSERT OR REPLACE INTO cache (key, value, expires_at) "
+                "VALUES (?, ?, ?)",
+                (key, value, expires_at),
+            )
+            await db.commit()
         except Exception:
             logger.exception("Cache L2 write error for key: %s", key)
 
@@ -173,6 +174,13 @@ class PersistentCache:
                 pass
             self._cleanup_task = None
 
+        if self._db is not None:
+            try:
+                await self._db.close()
+            except Exception:
+                logger.exception("Cache DB close error")
+            self._db = None
+
     async def _prune(self) -> None:
         now = time.time()
         expired = [k for k, (_, exp) in self._l1.items() if exp <= now]
@@ -180,9 +188,9 @@ class PersistentCache:
             del self._l1[k]
 
         try:
-            async with aiosqlite.connect(_db_path()) as db:
-                await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
-                await db.commit()
+            db = await self._get_db()
+            await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
+            await db.commit()
         except Exception:
             logger.exception("Cache L2 prune error")
 
@@ -190,9 +198,9 @@ class PersistentCache:
         """Wipe both tiers entirely."""
         self._l1.clear()
         try:
-            async with aiosqlite.connect(_db_path()) as db:
-                await db.execute("DELETE FROM cache")
-                await db.commit()
+            db = await self._get_db()
+            await db.execute("DELETE FROM cache")
+            await db.commit()
         except Exception:
             logger.exception("Cache clear error")
 
