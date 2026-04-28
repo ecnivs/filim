@@ -15,6 +15,16 @@ _TIMEOUT = 90.0
 _session_id: str | None = None
 _session_lock: asyncio.Lock | None = None
 
+# Persistent httpx client — avoids TCP handshake overhead to localhost:8191.
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=_TIMEOUT, http2=False)
+    return _http_client
+
 
 def _get_lock() -> asyncio.Lock:
     global _session_lock
@@ -42,13 +52,14 @@ async def _get_session(client: httpx.AsyncClient) -> str | None:
         return None
 
 
-async def _destroy_session(client: httpx.AsyncClient) -> None:
+async def _destroy_session(_client: httpx.AsyncClient | None = None) -> None:
     global _session_id
     sid = _session_id
     _session_id = None
     if sid:
         try:
-            await client.post(
+            c = _client or _get_client()
+            await c.post(
                 FLARESOLVERR_URL, json={"cmd": "sessions.destroy", "session": sid}
             )
         except Exception:
@@ -76,6 +87,7 @@ async def flarefetch(url: str, params: dict[str, str] | None = None) -> dict[str
 
     Uses a persistent browser session so the CF challenge is solved once and
     reused, cutting per-request overhead from ~12 s to ~1-2 s.
+    Uses a persistent httpx client to avoid TCP handshake overhead.
     """
     if params:
         from urllib.parse import urlencode
@@ -83,35 +95,35 @@ async def flarefetch(url: str, params: dict[str, str] | None = None) -> dict[str
     else:
         full_url = url
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        session_id = await _get_session(client)
+    client = _get_client()
+    session_id = await _get_session(client)
 
-        payload: dict[str, Any] = {
-            "cmd": "request.get",
-            "url": full_url,
-            "maxTimeout": 60000,
-        }
-        if session_id:
-            payload["session"] = session_id
+    payload: dict[str, Any] = {
+        "cmd": "request.get",
+        "url": full_url,
+        "maxTimeout": 60000,
+    }
+    if session_id:
+        payload["session"] = session_id
 
-        try:
-            resp = await client.post(FLARESOLVERR_URL, json=payload)
-            resp.raise_for_status()
-        except Exception as exc:
-            logging.error("FlareSolverr request failed: %s", exc)
-            return {}
+    try:
+        resp = await client.post(FLARESOLVERR_URL, json=payload)
+        resp.raise_for_status()
+    except Exception as exc:
+        logging.error("FlareSolverr request failed: %s", exc)
+        return {}
 
-        fs_data = resp.json()
-        if fs_data.get("status") != "ok":
-            msg = fs_data.get("message", "")
-            logging.error("FlareSolverr returned error: %s", msg)
-            # Session may have expired — drop it so next call recreates.
-            if session_id and ("session" in msg.lower() or "expired" in msg.lower()):
-                await _destroy_session(client)
-            return {}
+    fs_data = resp.json()
+    if fs_data.get("status") != "ok":
+        msg = fs_data.get("message", "")
+        logging.error("FlareSolverr returned error: %s", msg)
+        # Session may have expired — drop it so next call recreates.
+        if session_id and ("session" in msg.lower() or "expired" in msg.lower()):
+            await _destroy_session(client)
+        return {}
 
-        body = fs_data.get("solution", {}).get("response", "")
-        parsed = _parse_body(body)
-        if parsed is None:
-            return {}
-        return parsed
+    body = fs_data.get("solution", {}).get("response", "")
+    parsed = _parse_body(body)
+    if parsed is None:
+        return {}
+    return parsed

@@ -63,8 +63,8 @@ class _AllanimeGraphqlClient:
     base_url: str
     referer: str
     timeout: float
-    # Once CF blocks a direct request, skip direct attempts for the session lifetime.
-    _cf_blocked: bool = False
+    # CF blocks direct requests — skip direct attempt entirely, always use FlareSolverr.
+    _cf_blocked: bool = True
 
     async def query(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         params = {
@@ -205,6 +205,7 @@ class AllanimeCatalogAdapter:
         mode: str = MODE_SUB,
         page: int = 1,
         genres: list[str] | None = None,
+        show_type: str | None = None,
     ) -> List[ShowSummaryModel]:
         variables = {
             "search": {
@@ -219,6 +220,8 @@ class AllanimeCatalogAdapter:
         }
         if genres:
             variables["search"]["genres"] = genres_for_upstream_api(genres)
+        if show_type:
+            variables["search"]["type"] = show_type
         data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
         results: list[ShowSummaryModel] = []
@@ -264,6 +267,7 @@ class AllanimeCatalogAdapter:
         page: int = 1,
         mode: str = MODE_SUB,
         genres: list[str] | None = None,
+        show_type: str | None = None,
     ) -> list[ShowSummaryModel]:
         variables = {
             "search": {
@@ -278,6 +282,8 @@ class AllanimeCatalogAdapter:
         }
         if genres:
             variables["search"]["genres"] = genres_for_upstream_api(genres)
+        if show_type:
+            variables["search"]["type"] = show_type
         data = await self._client.query(SEARCH_SHOWS_QUERY, variables)
         edges = data.get("shows", {}).get("edges", []) or []
         results: list[ShowSummaryModel] = []

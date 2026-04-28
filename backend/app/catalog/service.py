@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Sequence
 
@@ -252,10 +253,35 @@ class CatalogService:
     async def get_movies(
         self, limit: int = 40, page: int = 1, mode: str = MODE_SUB
     ) -> list[ShowSummaryModel]:
-        """Return popular movies (exactly 1 episode)."""
-        popular = await self.source.get_popular_shows(limit=limit, page=page, mode=mode)
-        filtered = [s for s in popular if (s.episode_count or 0) == 1]
-        return self._deduplicate_results(filtered)
+        """Return movies using upstream type=Movie filter with multi-page fallback."""
+        # Try the API-level type filter first (single page, cheapest path).
+        results = await self.source.get_popular_shows(
+            limit=limit, page=page, mode=mode, show_type="Movie"
+        )
+        movies = [s for s in results if getattr(s, "type", None) == "Movie"]
+        if movies:
+            return self._deduplicate_results(movies)
+
+        # API didn't return Movie-typed items (type filter not supported or no
+        # movies on this page). Scan pages 1-5 concurrently to find movies.
+        page_results = await asyncio.gather(
+            *[
+                self.source.get_popular_shows(limit=40, page=p, mode=mode)
+                for p in range(1, 6)
+            ],
+            return_exceptions=True,
+        )
+        all_shows: list[ShowSummaryModel] = []
+        for pr in page_results:
+            if not isinstance(pr, Exception):
+                all_shows.extend(pr)
+
+        movies = [s for s in all_shows if getattr(s, "type", None) == "Movie"]
+        if not movies:
+            # Last resort: short-episode shows (OVA/specials/single-ep movies).
+            movies = [s for s in all_shows if (s.episode_count or 0) <= 3]
+
+        return self._deduplicate_results(movies[:limit])
 
     async def _summaries_from_related_edges(
         self,

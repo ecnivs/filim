@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ReactNode, Suspense, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/lib/profile-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -334,9 +335,9 @@ function ProfileDropdownItems({ currentId }: { currentId?: string }) {
                 ))}
             </div>
 
-            {unlocking && (
+            {unlocking && typeof document !== "undefined" && createPortal(
                 <div
-                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
                     onClick={() => { setUnlocking(null); setPin(""); setPinError(null); }}
                 >
                     <div
@@ -392,7 +393,8 @@ function ProfileDropdownItems({ currentId }: { currentId?: string }) {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );

@@ -107,6 +107,19 @@ select,
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* Card row hover — dim siblings only when a card is actually hovered.
+   Uses :has() so the trigger is card-hover, not row-area-hover. */
+@media (min-width: 768px) {
+  .group\/row-inner:has(.group\/card:hover) .group\/card:not(:hover) {
+    opacity: 0.35;
+    transition: opacity 200ms ease;
+  }
+  .group\/row-inner .group\/card:hover {
+    opacity: 1 !important;
+    transition: opacity 200ms ease;
+  }
+}
+
 /* Row edge-fade overlays for scroll indication (desktop only) */
 .row-fade-left,
 .row-fade-right {

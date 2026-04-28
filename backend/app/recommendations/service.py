@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.service import CatalogService
+from app.core.constants import COMMON_GENRES
 from app.models import ProfileListEntry, Show, ShowStats, WatchProgress
 from app.sources import ShowSummaryModel
 
@@ -197,7 +198,8 @@ class RecommendationService:
         )
 
     async def _fetch_raw_genres(self) -> list[str]:
-        counts: Counter[str] = Counter()
+        # Always start with all known genres as a floor so the pool is never tiny.
+        counts: Counter[str] = Counter({g: 1 for g in COMMON_GENRES})
 
         try:
             result = await self.db.execute(select(Show.genres))
@@ -207,16 +209,21 @@ class RecommendationService:
         except Exception:
             pass
 
-        if len(counts) < 20:
+        # Fetch two pages of popular shows to pull in additional upstream genres.
+        for page in (1, 2):
             try:
-                popular = await self.catalog.source.get_popular_shows(limit=50)
+                popular = await self.catalog.source.get_popular_shows(
+                    limit=50, page=page
+                )
                 for show in popular:
                     if show.tags:
                         counts.update(
                             [g.strip().title() for g in show.tags if g.strip()]
                         )
+                if len(counts) >= 60:
+                    break
             except Exception:
-                pass
+                break
 
         dynamic = []
         seen: set[str] = set()
@@ -224,10 +231,10 @@ class RecommendationService:
             if g not in seen:
                 seen.add(g)
                 dynamic.append(g)
-                if len(dynamic) >= 100:
+                if len(dynamic) >= 150:
                     break
 
-        return dynamic or ["Action", "Adventure", "Comedy"]
+        return dynamic
 
     async def _get_dynamic_genres(
         self, exclude: List[str] | None = None, profile_id: str | None = None
@@ -270,10 +277,10 @@ class RecommendationService:
             exclude=exclude_genres, profile_id=profile_id
         )
 
-        if cursor >= len(genres) or not genres:
+        if not genres or cursor >= len(genres):
             return [], None
 
-        batch_size = min(limit * 2, 10)
+        batch_size = min(limit + 2, 7)
         end = min(cursor + batch_size, len(genres))
         batch = genres[cursor:end]
 

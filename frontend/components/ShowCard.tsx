@@ -72,7 +72,7 @@ export function ShowCard({
 
     return (
         <div
-            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 ${variant === 'standard' ? 'md:group-hover/row-inner:opacity-30 md:hover:!opacity-100 md:hover:z-50' : ''} cursor-pointer active:scale-[0.97] md:active:scale-100`}
+            className={`group/card relative flex-shrink-0 ${widthClassName} transition-all duration-300 ${variant === 'standard' ? 'md:hover:z-50' : ''} cursor-pointer active:scale-[0.97] md:active:scale-100`}
             onClick={handleCardClick}
             onMouseEnter={prefetchDetails}
             role="button"
@@ -96,7 +96,7 @@ export function ShowCard({
                     </div>
                 )}
 
-                <div className="absolute inset-0 opacity-0 hidden md:flex md:group-hover/card:opacity-100 transition-opacity duration-300 flex-col justify-between p-3 bg-gradient-to-t from-black/95 via-black/20 to-black/40 z-40">
+                <div className="absolute inset-0 opacity-0 hidden md:flex md:group-hover/card:opacity-100 transition-opacity duration-300 flex-col justify-between p-3 bg-gradient-to-t from-black/90 via-black/10 to-transparent z-40">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1 scale-[0.8] origin-top-left">
                             <span className="text-ncyan font-black text-sm tracking-tighter">FILIM</span>

@@ -155,6 +155,9 @@ class PersistentCache:
             return
 
         async def _loop() -> None:
+            # Jitter initial sleep so workers don't all prune simultaneously.
+            jitter = (os.getpid() % 60) * 5
+            await asyncio.sleep(jitter)
             while True:
                 try:
                     await asyncio.sleep(interval)
@@ -183,6 +186,8 @@ class PersistentCache:
             self._db = None
 
     async def _prune(self) -> None:
+        import sqlite3
+
         now = time.time()
         expired = [k for k, (_, exp) in self._l1.items() if exp <= now]
         for k in expired:
@@ -191,8 +196,10 @@ class PersistentCache:
         try:
             db = await self._get_db()
             await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
-            await db.execute("PRAGMA wal_checkpoint(PASSIVE)")
             await db.commit()
+        except sqlite3.OperationalError:
+            # Another worker holds a write lock — prune is best-effort, skip.
+            pass
         except Exception:
             logger.exception("Cache L2 prune error")
 

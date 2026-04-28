@@ -199,17 +199,17 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
 
     const moreLikeThisItems = useMemo(() => {
         if (relatedFromSimilar.length > 0) {
-            return relatedFromSimilar.slice(0, 6);
+            return relatedFromSimilar.slice(0, 12);
         }
         const fromGenre = (genreFallback.data ?? []).filter(
             (item) => item.id && item.id !== id
         );
         if (fromGenre.length > 0) {
-            return fromGenre.slice(0, 6);
+            return fromGenre.slice(0, 12);
         }
         return (trendingFallback.data ?? [])
             .filter((item) => item.id && item.id !== id)
-            .slice(0, 6);
+            .slice(0, 12);
     }, [
         relatedFromSimilar,
         genreFallback.data,
@@ -292,7 +292,8 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
     const currentSeason = filteredSeasons.find(s => s.id === id) || filteredSeasons[0];
 
     const [synopsisExpanded, setSynopsisExpanded] = useState(false);
-    const [showAllEpisodes, setShowAllEpisodes] = useState(false);
+    const EPISODES_PER_PAGE = 20;
+    const [episodePage, setEpisodePage] = useState(0);
 
     if (isLoading || !data) {
         return (
@@ -345,8 +346,8 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                         alt={data.title}
                         fill
                         priority
+                        sizes="100vw"
                         className="object-cover"
-                        unoptimized
                     />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-black/20 to-transparent" />
@@ -388,8 +389,19 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
                     <div className="md:col-span-2 space-y-4 md:space-y-6">
                         <div className="flex items-center gap-2 text-xs md:text-sm text-neutral-400 font-semibold">
-                            <span>{new Date().getFullYear()}</span>
-                            <span>{data.episode_count} Episodes</span>
+                            {data.episode_count > 0 && (
+                                <span>{data.episode_count} {data.episode_count === 1 ? "Episode" : "Episodes"}</span>
+                            )}
+                            {data.available_audio_languages && data.available_audio_languages.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                    {data.available_audio_languages.includes("ja") && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-neutral-600 text-neutral-300">SUB</span>
+                                    )}
+                                    {data.available_audio_languages.includes("en") && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-neutral-600 text-neutral-300">DUB</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         <div className="text-[13px] md:text-lg text-white leading-relaxed whitespace-pre-wrap">
                             {synopsisExpanded ? (
@@ -459,8 +471,27 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                         )}
                     </div>
 
+                    {sortedEpisodes.length > EPISODES_PER_PAGE && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {Array.from({ length: Math.ceil(sortedEpisodes.length / EPISODES_PER_PAGE) }).map((_, i) => {
+                                const start = i * EPISODES_PER_PAGE + 1;
+                                const end = Math.min((i + 1) * EPISODES_PER_PAGE, sortedEpisodes.length);
+                                return (
+                                    <button
+                                        key={i}
+                                        onClick={() => setEpisodePage(i)}
+                                        className={`text-xs font-bold px-3 py-1.5 rounded border transition-colors ${episodePage === i ? "bg-white text-black border-white" : "border-neutral-700 text-neutral-400 hover:border-neutral-400 hover:text-white"}`}
+                                    >
+                                        {start}–{end}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     <div className="flex flex-col gap-1">
-                        {(showAllEpisodes ? sortedEpisodes : sortedEpisodes.slice(0, 10)).map((ep, idx) => {
+                        {sortedEpisodes.slice(episodePage * EPISODES_PER_PAGE, (episodePage + 1) * EPISODES_PER_PAGE).map((ep, idx) => {
+                            const globalIdx = episodePage * EPISODES_PER_PAGE + idx;
                             const epProgress = showProgress.data?.find(p => p.episode === ep.number);
                             const progressPercent = epProgress ? Math.min(Math.max(epProgress.progress * 100, 0), 100) : 0;
 
@@ -471,7 +502,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                     className="group flex items-center text-left gap-3 md:gap-6 p-3 py-4 md:p-4 rounded-lg bg-neutral-900/50 hover:bg-neutral-800 active:bg-neutral-700 transition-colors border-b border-neutral-800/50 last:border-0"
                                 >
                                     <span className="text-lg md:text-2xl font-black text-neutral-600 w-6 md:w-8 text-center shrink-0">
-                                        {idx + 1}
+                                        {globalIdx + 1}
                                     </span>
 
                                     <div className="relative aspect-video w-28 sm:w-36 md:w-48 overflow-hidden rounded bg-neutral-800 flex-shrink-0 hidden sm:block">
@@ -485,8 +516,8 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                                 src={data.cover_image_url}
                                                 alt={ep.title || `Episode ${ep.number}`}
                                                 fill
+                                                sizes="192px"
                                                 className="object-cover opacity-60"
-                                                unoptimized
                                             />
                                         )}
                                         {progressPercent > 0 && (
@@ -508,9 +539,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                                 <path d="M6 4l15 8-15 8V4z" />
                                             </svg>
                                         </div>
-                                        <p className="text-xs md:text-sm text-neutral-400 line-clamp-1 md:line-clamp-2 leading-relaxed hidden sm:block">
-                                            Watch the latest episode of {data.title}. Continuous high-quality streaming experience.
-                                        </p>
                                         {progressPercent > 0 && (
                                             <div className="mt-2 h-1 w-full bg-neutral-600/50 rounded overflow-hidden sm:hidden">
                                                 <div
@@ -524,18 +552,6 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                             );
                         })}
                     </div>
-
-                    {sortedEpisodes.length > 10 && (
-                        <button
-                            onClick={() => setShowAllEpisodes(!showAllEpisodes)}
-                            className="w-full flex items-center justify-center py-4 mt-2 border border-white/10 rounded-lg bg-neutral-900/40 hover:bg-neutral-800 transition-colors text-white group"
-                        >
-                            <span className="text-sm font-semibold mr-2">{showAllEpisodes ? "Show Less" : "Show More"}</span>
-                            <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-300 ${showAllEpisodes ? "rotate-180" : "group-hover:translate-y-1"}`} fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                        </button>
-                    )}
                 </section>
 
                 <section className="space-y-4 md:space-y-6">
