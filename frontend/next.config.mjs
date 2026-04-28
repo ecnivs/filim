@@ -9,15 +9,7 @@ const nextConfig = {
         remotePatterns: [
             {
                 protocol: "https",
-                hostname: "s4.anilist.co"
-            },
-            {
-                protocol: "https",
-                hostname: "api.allanime.day"
-            },
-            {
-                protocol: "https",
-                hostname: "cdn.myanimelist.net"
+                hostname: "**"
             }
         ]
     },

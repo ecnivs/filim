@@ -178,7 +178,6 @@ export default function HomePage() {
                                         priority
                                         sizes="100vw"
                                         className="object-cover"
-                                        unoptimized
                                     />
                                 ) : null}
                                 <div className="absolute inset-0 bg-gradient-to-r from-background via-background/60 to-transparent" />

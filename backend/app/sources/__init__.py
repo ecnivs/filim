@@ -3,6 +3,7 @@ from app.sources.allanime_catalog import (
     EpisodeSummaryModel,
     ShowSummaryModel,
     StreamCandidateModel,
+    get_catalog_adapter,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "ShowSummaryModel",
     "EpisodeSummaryModel",
     "StreamCandidateModel",
+    "get_catalog_adapter",
 ]

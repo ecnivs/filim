@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from collections import Counter
 from typing import List
 
@@ -10,6 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.catalog.service import CatalogService
 from app.models import ProfileListEntry, Show, ShowStats
 from app.sources import ShowSummaryModel
+
+# Module-level genre cache — recomputed every 5 min across all requests in worker.
+_genres_cache: tuple[list[str], float] | None = None
+_GENRES_TTL = 300
 
 
 class RecommendationSectionModel(BaseModel):
@@ -145,15 +151,13 @@ class RecommendationService:
             items=offset_items,
         )
 
-    async def _get_dynamic_genres(self, exclude: List[str] | None = None) -> List[str]:
-        counts = Counter()
-        exclude_set = {g.strip().title() for g in (exclude or [])}
+    async def _fetch_raw_genres(self) -> list[str]:
+        counts: Counter[str] = Counter()
 
         try:
             stmt = select(Show.genres)
             result = await self.db.execute(stmt)
-            genre_rows = result.scalars().all()
-            for row in genre_rows:
+            for row in result.scalars().all():
                 if row:
                     counts.update([g.strip().title() for g in row if g.strip()])
         except Exception:
@@ -171,20 +175,28 @@ class RecommendationService:
                 pass
 
         dynamic = []
-        seen = set()
+        seen: set[str] = set()
         for g, _ in counts.most_common(200):
-            if g not in seen and g not in exclude_set:
+            if g not in seen:
                 seen.add(g)
                 dynamic.append(g)
                 if len(dynamic) >= 100:
                     break
 
-        if not dynamic:
-            return [
-                g for g in ["Action", "Adventure", "Comedy"] if g not in exclude_set
-            ]
+        return dynamic or ["Action", "Adventure", "Comedy"]
 
-        return dynamic
+    async def _get_dynamic_genres(self, exclude: List[str] | None = None) -> List[str]:
+        global _genres_cache
+        now = time.monotonic()
+
+        if _genres_cache is None or now > _genres_cache[1]:
+            genres = await self._fetch_raw_genres()
+            _genres_cache = (genres, now + _GENRES_TTL)
+        else:
+            genres = _genres_cache[0]
+
+        exclude_set = {g.strip().title() for g in (exclude or [])}
+        return [g for g in genres if g not in exclude_set]
 
     async def get_discovery_sections(
         self,
@@ -192,7 +204,7 @@ class RecommendationService:
         limit: int = 3,
         profile_id: str | None = None,
     ) -> tuple[list[RecommendationSectionModel], int | None]:
-        exclude_genres = []
+        exclude_genres: list[str] = []
         try:
             for_you = await self.get_for_you_section(profile_id=profile_id)
             if "Recommended for " in for_you.title:
@@ -214,47 +226,42 @@ class RecommendationService:
         if cursor >= len(genres) or not genres:
             return [], None
 
+        # Fetch limit*2 genres concurrently to have buffer for empty results.
+        batch_size = min(limit * 2, 10)
+        end = min(cursor + batch_size, len(genres))
+        batch = genres[cursor:end]
+
+        results = await asyncio.gather(
+            *[self.catalog.search(query="", genres=[g], page=1) for g in batch],
+            return_exceptions=True,
+        )
+
         sections: list[RecommendationSectionModel] = []
         seen_ids: set[str] = set()
-        max_scan = limit * 5
-        i = cursor
-        attempts = 0
 
-        while (
-            len(sections) < limit
-            and i < len(genres)
-            and attempts < max_scan
-        ):
-            genre = genres[i]
-            i += 1
-            attempts += 1
-
-            try:
-                filtered = await self.catalog.search(query="", genres=[genre], page=1)
-                if not filtered:
-                    continue
-
-                final_items = []
-                for r in filtered:
-                    if r.id not in seen_ids:
-                        final_items.append(r)
-                        seen_ids.add(r.id)
-                    if len(final_items) >= 20:
-                        break
-
-                if final_items:
-                    slug = genre.lower().replace(" ", "_")
-                    sections.append(
-                        RecommendationSectionModel(
-                            id=f"genre_{slug}",
-                            title=genre,
-                            items=final_items,
-                        )
-                    )
-            except Exception:
+        for genre, result in zip(batch, results):
+            if len(sections) >= limit:
+                break
+            if isinstance(result, Exception) or not result:
                 continue
+            final_items = []
+            for r in result:
+                if r.id not in seen_ids:
+                    final_items.append(r)
+                    seen_ids.add(r.id)
+                if len(final_items) >= 20:
+                    break
+            if final_items:
+                slug = genre.lower().replace(" ", "_")
+                sections.append(
+                    RecommendationSectionModel(
+                        id=f"genre_{slug}",
+                        title=genre,
+                        items=final_items,
+                    )
+                )
 
-        next_cursor: int | None = i if i < len(genres) else None
+        next_cursor: int | None = end if end < len(genres) else None
         return sections, next_cursor
 
     async def get_device_recommendations(
@@ -262,7 +269,6 @@ class RecommendationService:
         device_token: str,
         profile_id: str | None = None,
     ) -> List[RecommendationSectionModel]:
-        sections: list[RecommendationSectionModel] = []
         is_guest = False
 
         if profile_id:
@@ -272,17 +278,24 @@ class RecommendationService:
             if profile and profile.is_guest:
                 is_guest = True
 
-        if not is_guest:
-            for_you = await self.get_for_you_section(profile_id=profile_id)
-            sections.append(for_you)
+        # Build coroutines in display order, run all concurrently.
+        coros = []
+        include_for_you = not is_guest
+        include_my_list = bool(profile_id and not is_guest)
 
-        trending = await self.get_trending_section()
-        sections.append(trending)
+        if include_for_you:
+            coros.append(self.get_for_you_section(profile_id=profile_id))
+        coros.append(self.get_trending_section())
+        if include_my_list:
+            coros.append(self.get_my_list_section(profile_id=profile_id))
 
-        if profile_id and not is_guest:
-            my_list = await self.get_my_list_section(profile_id=profile_id)
-            if my_list:
-                sections.append(my_list)
+        results = await asyncio.gather(*coros, return_exceptions=True)
+
+        sections: list[RecommendationSectionModel] = []
+        for r in results:
+            if isinstance(r, Exception) or r is None:
+                continue
+            sections.append(r)
 
         return sections
 

@@ -14,7 +14,7 @@ from app.core.constants import (
 )
 from app.core.utils import normalize_title
 from app.models import Show, ShowStats
-from app.sources import AllanimeCatalogAdapter, EpisodeSummaryModel, ShowSummaryModel
+from app.sources import AllanimeCatalogAdapter, EpisodeSummaryModel, ShowSummaryModel, get_catalog_adapter
 
 
 def _franchise_search_query(title: str | None, english_title: str | None) -> str | None:
@@ -49,7 +49,7 @@ class CatalogService:
 
     def __init__(self, db: AsyncSession, source: AllanimeCatalogAdapter | None = None):
         self.db = db
-        self.source = source or AllanimeCatalogAdapter()
+        self.source = source or get_catalog_adapter()
 
     async def search(
         self,

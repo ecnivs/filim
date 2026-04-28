@@ -190,6 +190,7 @@ class PersistentCache:
         try:
             db = await self._get_db()
             await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
+            await db.execute("PRAGMA wal_checkpoint(PASSIVE)")
             await db.commit()
         except Exception:
             logger.exception("Cache L2 prune error")

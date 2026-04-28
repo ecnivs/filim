@@ -44,6 +44,7 @@ export function ShowCard({
     const infoHref = `/show/${show.id}`;
 
     const prefetchDetails = () => {
+        if (queryClient.getQueryData(["show", show.id])) return;
         void queryClient.prefetchQuery({
             queryKey: ["show", show.id],
             queryFn: async () => {
@@ -84,7 +85,6 @@ export function ShowCard({
                     <Image
                         src={show.poster_image_url}
                         alt={show.title}
-                        unoptimized
                         fill
                         sizes="(max-width: 640px) 31vw, (max-width: 1024px) 23vw, 15vw"
                         className="object-cover"

@@ -176,6 +176,18 @@ def _normalized_tags(raw: list[str] | None) -> list[str]:
     return normalize_genre_list(list(raw or []))
 
 
+# Per-worker singleton — preserves _cf_blocked state across requests so
+# failed direct attempts aren't retried for the worker's lifetime.
+_adapter_singleton: "AllanimeCatalogAdapter | None" = None
+
+
+def get_catalog_adapter() -> "AllanimeCatalogAdapter":
+    global _adapter_singleton
+    if _adapter_singleton is None:
+        _adapter_singleton = AllanimeCatalogAdapter()
+    return _adapter_singleton
+
+
 class AllanimeCatalogAdapter:
     """Search, episodes, and stream URLs against the allanime.day GraphQL API."""
 

@@ -60,8 +60,7 @@ class ApiClient {
             method,
             headers,
             body: body ? JSON.stringify(body) : undefined,
-            cache: "no-store",
-            keepalive: method === "POST" || method === "PUT" || method === "PATCH"
+            keepalive: method !== "GET",
         });
 
         if (!response.ok) {

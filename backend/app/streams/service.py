@@ -5,7 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.sources import AllanimeCatalogAdapter, StreamCandidateModel
+from app.sources import AllanimeCatalogAdapter, StreamCandidateModel, get_catalog_adapter
 from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverError
 
 _PARALLEL_CANDIDATES = 3  # race this many candidates concurrently
@@ -54,7 +54,7 @@ async def _resolve_first(
 
 class StreamService:
     def __init__(self, source: AllanimeCatalogAdapter | None = None) -> None:
-        self.source = source or AllanimeCatalogAdapter()
+        self.source = source or get_catalog_adapter()
         self.resolver = StreamResolver()
 
     async def get_hls_manifest_for_episode(
