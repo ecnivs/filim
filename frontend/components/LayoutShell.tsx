@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/lib/profile-context";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/http";
 
 const NAV_ITEMS: { href: string; label: string }[] = [
@@ -257,51 +257,143 @@ const AVATAR_COLORS = [
     "from-orange-500 to-orange-800"
 ];
 
+type ProfileEntry = { id: string; name: string; is_guest: boolean; is_locked: boolean };
+
 function ProfileDropdownItems({ currentId }: { currentId?: string }) {
     const { setProfile } = useProfile();
-    const router = useRouter();
+    const [unlocking, setUnlocking] = useState<ProfileEntry | null>(null);
+    const [pin, setPin] = useState("");
+    const [pinError, setPinError] = useState<string | null>(null);
 
     const { data: profiles } = useQuery({
         queryKey: ["profiles"],
         queryFn: async () => {
-            const res = await api.get<{ items: { id: string; name: string; is_guest: boolean; is_locked: boolean }[] }>("/profiles");
+            const res = await api.get<{ items: ProfileEntry[] }>("/profiles");
             return res.data.items;
         }
     });
 
-    const others = profiles?.filter(p => p.id !== currentId) || [];
+    const verifyPin = useMutation({
+        mutationFn: async (payload: { profile: ProfileEntry; pin: string }) => {
+            await api.post(`/profiles/${payload.profile.id}/verify-pin`, { pin: payload.pin });
+        },
+        onSuccess: (_data, variables) => {
+            sessionStorage.setItem(`filim.pinVerified.${variables.profile.id}`, "1");
+            setProfile({ id: variables.profile.id, name: variables.profile.name, is_guest: variables.profile.is_guest });
+            window.location.href = "/";
+        },
+        onError: () => {
+            setPinError("Incorrect PIN.");
+            setPin("");
+        },
+    });
 
-    const handleSwitch = (p: { id: string; name: string; is_guest: boolean; is_locked: boolean }) => {
+    const handleSwitch = (p: ProfileEntry) => {
         if (p.is_locked) {
-            // Locked profiles must go through the PIN dialog on /profiles.
-            router.push("/profiles");
+            setUnlocking(p);
+            setPin("");
+            setPinError(null);
             return;
         }
         setProfile({ id: p.id, name: p.name, is_guest: p.is_guest });
         window.location.href = "/";
     };
 
+    const handlePinChange = (val: string) => {
+        const next = val.replace(/\D/g, "").slice(0, 4);
+        setPin(next);
+        setPinError(null);
+        if (next.length === 4 && unlocking && !verifyPin.isPending) {
+            verifyPin.mutate({ profile: unlocking, pin: next });
+        }
+    };
+
+    const others = profiles?.filter(p => p.id !== currentId) || [];
+
     return (
-        <div className="space-y-1">
-            {others.map((p, i) => (
-                <button
-                    key={p.id}
-                    onClick={() => handleSwitch(p)}
-                    className="w-full flex items-center gap-2 group/item px-1 py-1 rounded hover:bg-white/5 transition-colors"
+        <>
+            <div className="space-y-1">
+                {others.map((p, i) => (
+                    <button
+                        key={p.id}
+                        onClick={() => handleSwitch(p)}
+                        className="w-full flex items-center gap-2 group/item px-1 py-1 rounded hover:bg-white/5 transition-colors"
+                    >
+                        <div className={`h-6 w-6 rounded bg-gradient-to-br ${AVATAR_COLORS[(i + 1) % AVATAR_COLORS.length]} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>
+                            {p.name.slice(0, 1).toUpperCase()}
+                        </div>
+                        <span className="text-xs font-medium text-neutral-400 group-hover/item:text-white transition-colors truncate">
+                            {p.name}
+                        </span>
+                        {p.is_locked && (
+                            <svg viewBox="0 0 24 24" className="ml-auto w-3 h-3 shrink-0 text-neutral-600" fill="currentColor">
+                                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                            </svg>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {unlocking && (
+                <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={() => { setUnlocking(null); setPin(""); setPinError(null); }}
                 >
-                    <div className={`h-6 w-6 rounded bg-gradient-to-br ${AVATAR_COLORS[(i + 1) % AVATAR_COLORS.length]} flex items-center justify-center text-[10px] font-bold text-white`}>
-                        {p.name.slice(0, 1).toUpperCase()}
+                    <div
+                        className="dialog-panel-shell w-full max-w-xs px-8 py-10 space-y-8"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="text-center space-y-3">
+                            <div className={`h-16 w-16 mx-auto rounded-md bg-gradient-to-br ${AVATAR_COLORS[(others.findIndex(p => p.id === unlocking.id) + 1) % AVATAR_COLORS.length]} flex items-center justify-center text-2xl font-black text-white/90`}>
+                                {unlocking.name.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-foreground">{unlocking.name}</h2>
+                                <p className="text-xs text-neutral-400 mt-1">Enter PIN to switch profile</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <input
+                                type="password"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                maxLength={4}
+                                value={pin}
+                                onChange={e => handlePinChange(e.target.value)}
+                                className="dialog-input-emphasis"
+                                autoFocus
+                                onKeyDown={e => {
+                                    if (e.key === "Enter" && pin.length >= 4 && !verifyPin.isPending) {
+                                        verifyPin.mutate({ profile: unlocking, pin });
+                                    }
+                                }}
+                            />
+                            {pinError && (
+                                <p aria-live="polite" className="text-xs text-nred text-center font-medium">{pinError}</p>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <button
+                                type="button"
+                                disabled={verifyPin.isPending || pin.length < 4}
+                                onClick={() => verifyPin.mutate({ profile: unlocking, pin })}
+                                className="w-full rounded bg-white py-2.5 text-sm font-bold text-black hover:bg-neutral-200 disabled:opacity-50 transition-all active:scale-95"
+                            >
+                                {verifyPin.isPending ? "Unlocking…" : "Unlock"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setUnlocking(null); setPin(""); setPinError(null); }}
+                                className="w-full py-2 text-sm text-neutral-500 hover:text-white transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
-                    <span className="text-xs font-medium text-neutral-400 group-hover/item:text-white transition-colors truncate">
-                        {p.name}
-                    </span>
-                    {p.is_locked && (
-                        <svg viewBox="0 0 24 24" className="ml-auto w-3 h-3 shrink-0 text-neutral-600" fill="currentColor">
-                            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-                        </svg>
-                    )}
-                </button>
-            ))}
-        </div>
+                </div>
+            )}
+        </>
     );
 }
