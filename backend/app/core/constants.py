@@ -32,6 +32,7 @@ DEFAULT_USER_AGENT = (
 
 # Source Configuration
 ALLANIME_API_URL = "https://api.allanime.day/api"
+ALLANIME_BASE_URL = "https://allanime.day"
 ALLANIME_REFERER = "https://allmanga.to"
 HTTP_TIMEOUT_SECONDS = 15.0
 

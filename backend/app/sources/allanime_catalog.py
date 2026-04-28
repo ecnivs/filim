@@ -55,6 +55,7 @@ class StreamCandidateModel(BaseModel):
     url: str
     has_subtitles: bool = False
     referer: Optional[str] = None
+    priority: float = 0.0
 
 
 @dataclass
@@ -62,6 +63,8 @@ class _AllanimeGraphqlClient:
     base_url: str
     referer: str
     timeout: float
+    # Once CF blocks a direct request, skip direct attempts for the session lifetime.
+    _cf_blocked: bool = False
 
     async def query(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         params = {
@@ -69,10 +72,11 @@ class _AllanimeGraphqlClient:
             "variables": json.dumps(variables, separators=(",", ":")),
         }
 
-        # Try direct request first (fast path, works when CF isn't challenging)
-        data = await self._direct_query(params)
-        if data:
-            return data
+        if not self._cf_blocked:
+            data = await self._direct_query(params)
+            if data:
+                return data
+            self._cf_blocked = True
 
         # Fall back to FlareSolverr (bypasses CF JS challenge)
         logging.info("Direct request blocked, retrying via FlareSolverr")
@@ -389,9 +393,11 @@ class AllanimeCatalogAdapter:
         candidates: list[StreamCandidateModel] = []
         for src in source_urls:
             source_name = (src.get("sourceName") or "").lower()
+            priority = float(src.get("priority") or 0)
 
             downloads = src.get("downloads") or {}
             raw_url = downloads.get("downloadUrl") or src.get("sourceUrl") or ""
+            raw_url = _decode_source_url(raw_url)
 
             url, kind, resolution, has_subtitles = self._decode_provider_url(
                 source_name,
@@ -407,8 +413,11 @@ class AllanimeCatalogAdapter:
                     url=url,
                     has_subtitles=has_subtitles,
                     referer=settings.allanime_referer,
+                    priority=priority,
                 )
             )
+        # Sort by API priority descending so callers get highest-quality first
+        candidates.sort(key=lambda c: c.priority, reverse=True)
         return candidates
 
     def _decode_provider_url(
@@ -417,6 +426,9 @@ class AllanimeCatalogAdapter:
         encoded: str,
     ) -> tuple[str | None, str, str | None, bool]:
         url = encoded
+        # Relative clock URLs are served from allanime.day base
+        if url.startswith("/"):
+            url = settings.allanime_base_url + url
         kind = "m3u8" if ".m3u8" in url else "mp4"
 
         resolution: str | None = None

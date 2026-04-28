@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -9,15 +11,71 @@ import httpx
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 _TIMEOUT = 90.0
 
+# Persistent browser session — CF challenge solved once, reused across requests.
+_session_id: str | None = None
+_session_lock: asyncio.Lock | None = None
+
+
+def _get_lock() -> asyncio.Lock:
+    global _session_lock
+    if _session_lock is None:
+        _session_lock = asyncio.Lock()
+    return _session_lock
+
+
+async def _get_session(client: httpx.AsyncClient) -> str | None:
+    """Return cached session ID, creating one if needed."""
+    global _session_id
+    async with _get_lock():
+        if _session_id:
+            return _session_id
+        try:
+            resp = await client.post(FLARESOLVERR_URL, json={"cmd": "sessions.create"})
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("status") == "ok":
+                _session_id = data["session"]
+                logging.info("FlareSolverr: created session %s", _session_id)
+                return _session_id
+        except Exception as exc:
+            logging.warning("FlareSolverr: could not create session: %s", exc)
+        return None
+
+
+async def _destroy_session(client: httpx.AsyncClient) -> None:
+    global _session_id
+    sid = _session_id
+    _session_id = None
+    if sid:
+        try:
+            await client.post(
+                FLARESOLVERR_URL, json={"cmd": "sessions.destroy", "session": sid}
+            )
+        except Exception:
+            pass
+
+
+def _parse_body(body: str) -> dict[str, Any] | None:
+    """Strip FlareSolverr's HTML wrapper and parse JSON."""
+    if not body:
+        return None
+    pre_match = re.search(r"<pre[^>]*>([\s\S]*?)</pre>", body, re.IGNORECASE)
+    if pre_match:
+        body = pre_match.group(1).strip()
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        logging.error(
+            "FlareSolverr response is not JSON (first 200 chars): %s", body[:200]
+        )
+        return None
+
 
 async def flarefetch(url: str, params: dict[str, str] | None = None) -> dict[str, Any]:
     """Fetch a Cloudflare-protected URL through FlareSolverr.
 
-    Builds the full URL with query params (FlareSolverr only supports GET via
-    the `url` field), sends it to the local FlareSolverr instance, and returns
-    the parsed JSON body from the page response.
-
-    Returns an empty dict on any failure so callers degrade gracefully.
+    Uses a persistent browser session so the CF challenge is solved once and
+    reused, cutting per-request overhead from ~12 s to ~1-2 s.
     """
     if params:
         from urllib.parse import urlencode
@@ -25,39 +83,35 @@ async def flarefetch(url: str, params: dict[str, str] | None = None) -> dict[str
     else:
         full_url = url
 
-    payload = {
-        "cmd": "request.get",
-        "url": full_url,
-        "maxTimeout": 60000,
-    }
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        session_id = await _get_session(client)
 
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        payload: dict[str, Any] = {
+            "cmd": "request.get",
+            "url": full_url,
+            "maxTimeout": 60000,
+        }
+        if session_id:
+            payload["session"] = session_id
+
+        try:
             resp = await client.post(FLARESOLVERR_URL, json=payload)
             resp.raise_for_status()
-    except Exception as exc:
-        logging.error(f"FlareSolverr request failed: {exc}")
-        return {}
+        except Exception as exc:
+            logging.error("FlareSolverr request failed: %s", exc)
+            return {}
 
-    fs_data = resp.json()
-    if fs_data.get("status") != "ok":
-        logging.error(f"FlareSolverr returned error: {fs_data.get('message')}")
-        return {}
+        fs_data = resp.json()
+        if fs_data.get("status") != "ok":
+            msg = fs_data.get("message", "")
+            logging.error("FlareSolverr returned error: %s", msg)
+            # Session may have expired — drop it so next call recreates.
+            if session_id and ("session" in msg.lower() or "expired" in msg.lower()):
+                await _destroy_session(client)
+            return {}
 
-    body = fs_data.get("solution", {}).get("response", "")
-    if not body:
-        logging.error("FlareSolverr solution contained no response body")
-        return {}
-
-    # FlareSolverr wraps plain JSON responses in <html><body><pre>...</pre></body></html>
-    # Strip the wrapper if present before parsing.
-    import re as _re
-    pre_match = _re.search(r"<pre[^>]*>([\s\S]*?)</pre>", body, _re.IGNORECASE)
-    if pre_match:
-        body = pre_match.group(1).strip()
-
-    try:
-        return json.loads(body)
-    except json.JSONDecodeError:
-        logging.error(f"FlareSolverr response is not JSON (first 200 chars): {body[:200]}")
-        return {}
+        body = fs_data.get("solution", {}).get("response", "")
+        parsed = _parse_body(body)
+        if parsed is None:
+            return {}
+        return parsed

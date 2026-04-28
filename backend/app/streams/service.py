@@ -22,7 +22,6 @@ class StreamService:
         self.source = source or AllanimeCatalogAdapter()
         self.resolver = StreamResolver()
 
-    @cache_response(ttl_seconds=1800)
     async def get_hls_manifest_for_episode(
         self,
         show_id: str,
@@ -32,6 +31,8 @@ class StreamService:
         device_token: Optional[str],
         variant_id: Optional[str] = None,
     ) -> tuple[str, list[StreamVariantModel]]:
+        # Stream candidates are cached upstream (900 s). Resolved URLs (CDN/wixmp)
+        # expire on their own schedule — don't cache them here or stale URLs break playback.
         candidates = await self.source.get_stream_candidates(
             show_id=show_id,
             episode=episode,
@@ -41,24 +42,9 @@ class StreamService:
         if not candidates:
             raise RuntimeError("No stream candidates available")
 
-        preferred_providers = [
-            "fm-hls",
-            "vn-hls",
-            "s-mp4",
-            "mp4",
-            "ok",
-            "uni",
-            "yt-mp4",
-            "ak",
-            "luf-mp4",
-        ]
-
-        def provider_rank(c: StreamCandidateModel) -> int:
-            name = (c.provider or "").lower()
-            try:
-                return preferred_providers.index(name)
-            except ValueError:
-                return len(preferred_providers)
+        # Candidates are already sorted by API priority (descending) from the source.
+        def provider_rank(c: StreamCandidateModel) -> float:
+            return -c.priority  # negate for ascending sort (highest priority first)
 
         ordered = sorted(candidates, key=provider_rank)
 

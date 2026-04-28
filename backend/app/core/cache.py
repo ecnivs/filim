@@ -44,7 +44,10 @@ def cache_response(
 
             result = await func(*args, **kwargs)
 
-            if result is not None:
+            # Never cache empty collections — empty results are usually transient
+            # failures (CF block, decryption miss) and must not poison the cache.
+            cacheable = result is not None and result != [] and result != {}
+            if cacheable:
                 try:
                     data_to_cache = jsonable_encoder(result)
 

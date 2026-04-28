@@ -134,6 +134,40 @@ class StreamResolver:
             kind = "hls" if ".m3u8" in url else "file"
             return ResolvedStream(url=url, kind=kind, resolution=candidate.resolution)
 
+        # No file extension — probe Content-Type to detect direct media files.
+        # Some CDNs (e.g. tools.fast4speed.rsvp) require Referer; also follow
+        # redirects so we can inspect the final URL for a file extension.
+        _MEDIA_CTS = ("video/", "audio/", "application/octet-stream", "application/vnd.apple.mpegurl")
+        _probe_headers = {
+            "Referer": settings.allanime_referer,
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+            ),
+        }
+        try:
+            async with httpx.AsyncClient(
+                timeout=8.0, follow_redirects=True, headers=_probe_headers
+            ) as probe_client:
+                probe_resp = await probe_client.head(url)
+                # Some servers reject HEAD — retry with GET (no body read) on 4xx
+                if probe_resp.status_code >= 400:
+                    probe_resp = await probe_client.get(
+                        url, headers={**_probe_headers, "Range": "bytes=0-0"}
+                    )
+                ct = probe_resp.headers.get("content-type", "").lower()
+                final_url = str(probe_resp.url)
+                is_media_ct = any(ct.startswith(m) for m in _MEDIA_CTS)
+                has_media_ext = any(
+                    ext in final_url for ext in (".m3u8", ".mp4", ".webm", ".mkv")
+                )
+                if probe_resp.status_code < 400 and (is_media_ct or has_media_ext):
+                    stream_url = final_url if (has_media_ext or is_media_ct) else url
+                    kind = "hls" if ".m3u8" in stream_url else "file"
+                    return ResolvedStream(url=stream_url, kind=kind, resolution=candidate.resolution)
+        except Exception:
+            pass
+
         format_selector = "best"
         if preferred_quality:
             h = "".join(ch for ch in preferred_quality if ch.isdigit())
@@ -155,7 +189,7 @@ class StreamResolver:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
         except asyncio.TimeoutExpired as exc:
             try:
                 proc.kill()

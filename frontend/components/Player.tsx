@@ -1081,6 +1081,35 @@ export function Player({
         window.addEventListener('mouseup', handleMouseUp);
     };
 
+    const handleSeekBarTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        handleSeekStart();
+        const bar = seekBarRef.current;
+        if (!bar) return;
+        const rect = bar.getBoundingClientRect();
+        const touch = e.touches[0];
+        const x = Math.max(0, Math.min(touch.clientX - rect.left, rect.width));
+        setScrubPercent((x / rect.width) * 100);
+
+        const handleTouchMove = (moveEvent: TouchEvent) => {
+            moveEvent.preventDefault();
+            const t = moveEvent.touches[0];
+            const x2 = Math.max(0, Math.min(t.clientX - rect.left, rect.width));
+            setScrubPercent((x2 / rect.width) * 100);
+        };
+
+        const handleTouchEnd = (endEvent: TouchEvent) => {
+            const t = endEvent.changedTouches[0];
+            const x2 = Math.max(0, Math.min(t.clientX - rect.left, rect.width));
+            handleSeekCommit((x2 / rect.width) * 100);
+            window.removeEventListener('touchmove', handleTouchMove);
+            window.removeEventListener('touchend', handleTouchEnd);
+        };
+
+        window.addEventListener('touchmove', handleTouchMove, { passive: false });
+        window.addEventListener('touchend', handleTouchEnd);
+    };
+
     const toggleFullscreen = () => {
         const container = containerRef.current;
         if (!container) return;
@@ -1421,39 +1450,46 @@ export function Player({
                     leaveTo="opacity-0 translate-y-8"
                 >
                     <div
-                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 sm:px-12 sm:pb-12"
+                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-3 pb-[max(20px,env(safe-area-inset-bottom))] pt-3 sm:px-12 sm:pb-12 sm:pt-2"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="space-y-3 sm:space-y-6">
-                            <div className="group relative flex items-center h-12 sm:h-8">
+                        <div className="space-y-2 sm:space-y-6">
+                            <div className="group relative flex items-center gap-3">
+                                {/* Hit area wrapper — no background, just extends touch target via padding */}
                                 <div
                                     ref={seekBarRef}
-                                    className="relative h-1.5 sm:h-1 w-full flex-1 bg-white/10 transition-all group-hover:h-2 sm:group-hover:h-1.5 rounded-full overflow-visible cursor-pointer py-5 -my-5 sm:py-3 sm:-my-3"
-                                    style={{ touchAction: "manipulation" }}
+                                    className="relative flex-1 cursor-pointer py-4 -my-4"
+                                    style={{ touchAction: "none" }}
                                     onClick={handleSeekBarClick}
                                     onMouseDown={handleSeekBarMouseDown}
+                                    onTouchStart={handleSeekBarTouchStart}
                                 >
+                                    {/* Visual track */}
+                                    <div className="relative h-1 w-full rounded-full bg-white/15 overflow-hidden transition-[height] duration-150 group-hover:h-1.5">
+                                        <div
+                                            className="absolute inset-y-0 left-0 bg-white/25 rounded-full"
+                                            style={{ width: `${bufferedPercent}%` }}
+                                        />
+                                        <div
+                                            className="absolute inset-y-0 left-0 bg-ncyan rounded-full"
+                                            style={{ width: `${effectivePercent}%` }}
+                                        />
+                                    </div>
+                                    {/* Scrubber thumb */}
                                     <div
-                                        className="absolute h-full bg-white/20 transition-all duration-300 rounded-full"
-                                        style={{ width: `${bufferedPercent}%` }}
-                                    />
-                                    <div
-                                        className="absolute h-full bg-ncyan shadow-[0_0_10px_rgba(30,215,96,0.3)] rounded-full"
-                                        style={{ width: `${effectivePercent}%` }}
-                                    />
-                                    <div
-                                        className="absolute top-1/2 -translate-y-1/2 h-4 w-4 sm:h-3.5 sm:w-3.5 rounded-full bg-ncyan opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-[0_0_6px_rgba(30,215,96,0.5)] pointer-events-none z-10"
-                                        style={{ left: `${effectivePercent}%`, transform: `translate(-50%, -50%)` }}
+                                        className={`absolute top-1/2 h-3.5 w-3.5 rounded-full bg-white shadow-md pointer-events-none z-10 transition-[opacity,transform] duration-150 ${isScrubbing ? "opacity-100 scale-125" : "opacity-0 group-hover:opacity-100 scale-100"}`}
+                                        style={{ left: `${effectivePercent}%`, transform: `translateX(-50%) translateY(-50%) ${isScrubbing ? "scale(1.25)" : "scale(1)"}` }}
                                     />
                                 </div>
-                                <div className="ml-3 tabular-nums text-xs font-medium text-white/80 whitespace-nowrap">
-                                    <span className="hidden sm:inline">{formatTime(currentTime)} / </span>
-                                    <span className="text-white/50">-{formatTime(duration - currentTime)}</span>
+                                <div className="tabular-nums text-[11px] font-medium text-white/70 whitespace-nowrap select-none shrink-0">
+                                    <span>{formatTime(currentTime)}</span>
+                                    <span className="text-white/30 mx-1">/</span>
+                                    <span className="text-white/50">{formatTime(duration)}</span>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
-                                <div className="flex items-center gap-2 sm:gap-6 justify-start">
+                                <div className="flex items-center gap-1 sm:gap-6 justify-start">
                                     <button
                                         type="button"
                                         onClick={togglePlay}
@@ -1527,7 +1563,7 @@ export function Player({
                                 </div>
 
                                 <div
-                                    className="flex items-center gap-1.5 sm:gap-5 justify-end"
+                                    className="flex items-center gap-2 sm:gap-5 justify-end"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     {!isMovie && (
@@ -1878,7 +1914,7 @@ function TwoColumnMenu({
                                             <span className="truncate">{opt.label}</span>
 
                                             {!isActive && (
-                                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-ncyan transition-all group-hover:h-3/4 rounded-r-full shadow-[0_0_8px_rgba(30,215,96,0.4)]" />
+                                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-ncyan transition-all group-hover:h-3/4 rounded-r-full shadow-[0_0_8px_rgba(6,182,212,0.4)]" />
                                             )}
                                         </button>
                                     );

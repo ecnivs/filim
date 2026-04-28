@@ -17,6 +17,7 @@ class Settings:
         self.port: int = constants.DEFAULT_PORT
 
         self.allanime_api_url: str = constants.ALLANIME_API_URL
+        self.allanime_base_url: str = constants.ALLANIME_BASE_URL
         self.allanime_referer: str = constants.ALLANIME_REFERER
         self.http_timeout_seconds: float = constants.HTTP_TIMEOUT_SECONDS
 
