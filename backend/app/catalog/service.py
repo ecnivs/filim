@@ -263,11 +263,15 @@ class CatalogService:
             return self._deduplicate_results(movies)
 
         # API didn't return Movie-typed items (type filter not supported or no
-        # movies on this page). Scan pages 1-5 concurrently to find movies.
+        # movies on this page). Scan a window of 5 upstream pages offset by the
+        # requested page so each frontend page gets different results.
+        pages_per_window = 5
+        start_page = (page - 1) * pages_per_window + 1
+        end_page = start_page + pages_per_window
         page_results = await asyncio.gather(
             *[
                 self.source.get_popular_shows(limit=40, page=p, mode=mode)
-                for p in range(1, 6)
+                for p in range(start_page, end_page)
             ],
             return_exceptions=True,
         )
@@ -275,6 +279,10 @@ class CatalogService:
         for pr in page_results:
             if not isinstance(pr, Exception):
                 all_shows.extend(pr)
+
+        if not all_shows:
+            # Upstream returned nothing for this window — no more pages.
+            return []
 
         movies = [s for s in all_shows if getattr(s, "type", None) == "Movie"]
         if not movies:

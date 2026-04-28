@@ -39,11 +39,20 @@ export function GridView({
         }
     }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-    const allItems: ShowSummary[] = data?.pages?.flatMap((page: any) => {
-        if (Array.isArray(page)) return page;
-        if (page && typeof page === 'object' && 'items' in page) return page.items;
-        return [];
-    }) || [];
+    const allItems: ShowSummary[] = (() => {
+        const raw: ShowSummary[] = data?.pages?.flatMap((page: any) => {
+            if (Array.isArray(page)) return page;
+            if (page && typeof page === 'object' && 'items' in page) return page.items;
+            return [];
+        }) || [];
+        // Deduplicate by id to prevent repeated cards across pages
+        const seen = new Set<string>();
+        return raw.filter((item) => {
+            if (!item.id || seen.has(item.id)) return false;
+            seen.add(item.id);
+            return true;
+        });
+    })();
 
     const isSearchTitle = title.toLowerCase().includes("search");
 
