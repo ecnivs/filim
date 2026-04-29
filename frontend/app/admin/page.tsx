@@ -29,6 +29,18 @@ type ProfileEntry = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const AVATAR_COLORS = [
+    "bg-violet-700", "bg-blue-700", "bg-emerald-700",
+    "bg-amber-700", "bg-rose-700", "bg-teal-700",
+    "bg-orange-700", "bg-indigo-700",
+];
+
+function avatarColor(name: string): string {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 function Toggle({
     checked,
     onChange,
@@ -44,7 +56,7 @@ function Toggle({
             role="switch"
             aria-checked={checked}
             onClick={() => !disabled && onChange(!checked)}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none ${
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-ncyan ${
                 disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
             } ${checked ? "bg-ncyan" : "bg-neutral-700"}`}
         >
@@ -57,25 +69,51 @@ function Toggle({
     );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ children }: { children: React.ReactNode }) {
     return (
-        <div className="bg-surface border border-neutral-800 rounded-xl p-6 space-y-5">
-            <h2 className="text-sm font-bold text-neutral-400 uppercase tracking-widest">
-                {title}
-            </h2>
+        <div className="bg-surface border border-neutral-800 rounded-xl overflow-hidden">
             {children}
         </div>
     );
 }
 
-function FieldRow({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
+function SectionHeader({ title }: { title: string }) {
     return (
-        <div className="flex items-center justify-between gap-4">
+        <div className="px-5 pt-5 pb-2">
+            <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{title}</p>
+        </div>
+    );
+}
+
+function FieldRow({ label, sub, children, className }: { label: string; sub?: string; children: React.ReactNode; className?: string }) {
+    return (
+        <div className={`flex items-center justify-between gap-4 px-5 py-4 ${className ?? ""}`}>
             <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">{label}</p>
-                {sub && <p className="text-xs text-neutral-500 mt-0.5">{sub}</p>}
+                {sub && <p className="text-xs text-neutral-500 mt-0.5 leading-snug">{sub}</p>}
             </div>
             <div className="shrink-0">{children}</div>
+        </div>
+    );
+}
+
+function Divider() {
+    return <div className="border-t border-neutral-800 mx-5" />;
+}
+
+function SkeletonCard() {
+    return (
+        <div className="bg-surface border border-neutral-800 rounded-xl p-5 space-y-5 animate-pulse">
+            <div className="h-2.5 w-20 bg-neutral-800 rounded" />
+            {[40, 52, 36].map((w, i) => (
+                <div key={i} className="flex justify-between items-center">
+                    <div className="space-y-2">
+                        <div className={`h-3 w-${w} bg-neutral-800 rounded`} />
+                        <div className="h-2 w-48 bg-neutral-800 rounded" />
+                    </div>
+                    <div className="h-6 w-11 bg-neutral-800 rounded-full" />
+                </div>
+            ))}
         </div>
     );
 }
@@ -122,7 +160,14 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
                         placeholder="Admin password"
                         autoFocus
                     />
-                    {error && <p className="text-nred text-xs font-medium">{error}</p>}
+                    {error && (
+                        <p className="text-nred text-xs font-medium flex items-center justify-center gap-1.5">
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            {error}
+                        </p>
+                    )}
                 </div>
                 <button
                     onClick={handleLogin}
@@ -202,30 +247,43 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     return (
         <div className="min-h-screen bg-background">
             <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-neutral-800">
-                <div className="flex items-center justify-between px-6 h-14">
+                <div className="flex items-center justify-between px-5 h-14">
                     <div className="flex items-center gap-3">
-                        <Link href="/" className="text-neutral-500 hover:text-white transition-colors" aria-label="Back to app">
+                        <Link
+                            href="/"
+                            className="text-neutral-500 hover:text-white transition-colors p-1 -ml-1 rounded-md hover:bg-white/5"
+                            aria-label="Back to app"
+                        >
                             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="15 18 9 12 15 6" />
                             </svg>
                         </Link>
-                        <span className="text-ncyan font-black tracking-tighter uppercase text-lg">Filim</span>
-                        <span className="text-neutral-600 text-sm">/ Admin</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-ncyan font-black tracking-tighter uppercase text-lg leading-none">Filim</span>
+                            <span className="text-neutral-700 text-sm">/</span>
+                            <span className="text-neutral-400 text-sm font-medium">Admin</span>
+                        </div>
                     </div>
-                    <button onClick={() => { clearAdminToken(); onLogout(); }} className="text-xs text-neutral-500 hover:text-white transition-colors">
+                    <button
+                        onClick={() => { clearAdminToken(); onLogout(); }}
+                        className="text-xs text-neutral-500 hover:text-white transition-colors px-3 py-1.5 rounded-md hover:bg-white/5"
+                    >
                         Sign out
                     </button>
                 </div>
             </header>
 
-            <div className="border-b border-neutral-800 px-6">
-                <div className="flex gap-1">
+            {/* Tab bar */}
+            <div className="px-5 pt-4 pb-0">
+                <div className="flex gap-1 p-1 bg-neutral-900 rounded-xl max-w-xl mx-auto">
                     {(["settings", "profiles"] as const).map((t) => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
-                            className={`py-3 px-4 text-sm font-medium capitalize border-b-2 transition-colors -mb-px ${
-                                tab === t ? "border-ncyan text-ncyan" : "border-transparent text-neutral-500 hover:text-white"
+                            className={`flex-1 py-2 text-sm font-medium capitalize rounded-lg transition-all ${
+                                tab === t
+                                    ? "bg-surface text-white shadow-sm"
+                                    : "text-neutral-500 hover:text-neutral-300"
                             }`}
                         >
                             {t}
@@ -234,13 +292,29 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
             </div>
 
-            <div className="max-w-xl mx-auto px-6 py-8 space-y-6">
+            <div className="max-w-xl mx-auto px-5 py-5 space-y-4">
                 {loadingSettings ? (
-                    <div className="text-neutral-600 text-sm">Loading…</div>
+                    <>
+                        <SkeletonCard />
+                        <SkeletonCard />
+                    </>
                 ) : !settings ? (
-                    <div className="text-nred text-sm">
-                        Failed to load settings.{" "}
-                        <button onClick={() => { void fetchSettings(); void fetchProfiles(); }} className="underline">Retry</button>
+                    <div className="flex flex-col items-center gap-4 py-12 text-center">
+                        <div className="w-12 h-12 rounded-full bg-nred/10 flex items-center justify-center">
+                            <svg viewBox="0 0 24 24" className="w-6 h-6 text-nred" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-foreground">Failed to load settings</p>
+                            <p className="text-xs text-neutral-500 mt-1">Check your connection and try again</p>
+                        </div>
+                        <button
+                            onClick={() => { void fetchSettings(); void fetchProfiles(); }}
+                            className="px-4 py-2 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 transition-all"
+                        >
+                            Retry
+                        </button>
                     </div>
                 ) : tab === "settings" ? (
                     <SettingsTab settings={settings} onPatch={patchSettings} saving={saving} />
@@ -255,7 +329,20 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             </div>
 
             {toast && (
-                <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg text-sm font-medium shadow-dialog transition-all ${toast.ok ? "bg-ncyan text-black" : "bg-nred text-white"}`}>
+                <div
+                    className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl text-sm font-medium shadow-lg flex items-center gap-2 transition-all ${
+                        toast.ok ? "bg-ncyan text-black" : "bg-nred text-white"
+                    }`}
+                >
+                    {toast.ok ? (
+                        <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                    ) : (
+                        <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    )}
                     {toast.msg}
                 </div>
             )}
@@ -264,6 +351,51 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 }
 
 // ── Settings Tab ──────────────────────────────────────────────────────────────
+
+function NumberStepper({
+    value,
+    onChange,
+    min = 1,
+    max = 99,
+}: {
+    value: number;
+    onChange: (v: number) => void;
+    min?: number;
+    max?: number;
+}) {
+    return (
+        <div className="flex items-center gap-0 border border-neutral-700 rounded-lg overflow-hidden">
+            <button
+                type="button"
+                onClick={() => onChange(Math.max(min, value - 1))}
+                disabled={value <= min}
+                className="w-9 h-9 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+            </button>
+            <input
+                type="number"
+                min={min}
+                max={max}
+                value={value}
+                onChange={(e) => onChange(Math.min(max, Math.max(min, parseInt(e.target.value) || min)))}
+                className="w-12 h-9 bg-transparent text-center text-sm font-medium text-foreground focus:outline-none border-x border-neutral-700"
+            />
+            <button
+                type="button"
+                onClick={() => onChange(Math.min(max, value + 1))}
+                disabled={value >= max}
+                className="w-9 h-9 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+            </button>
+        </div>
+    );
+}
 
 function SettingsTab({
     settings,
@@ -336,91 +468,96 @@ function SettingsTab({
 
     return (
         <>
-            <Card title="Profiles">
+            {/* Profiles & Access */}
+            <Card>
+                <SectionHeader title="Access" />
+
                 <FieldRow label="Allow creating profiles" sub="Users can create profiles from the profiles page">
                     <Toggle checked={allowCreating} onChange={setAllowCreating} />
                 </FieldRow>
-
-                <div className="border-t border-neutral-800" />
-
-                <FieldRow label="Guest profile" sub="Show the Guest profile on the profiles page">
+                <Divider />
+                <FieldRow label="Guest profile" sub="Show the Guest profile on the profile picker">
                     <Toggle checked={guestEnabled} onChange={setGuestEnabled} />
                 </FieldRow>
-
-                <div className="border-t border-neutral-800" />
-
-                <FieldRow label="Require PINs" sub="All profiles must have a PIN to be created">
+                <Divider />
+                <FieldRow label="Require PINs" sub="All non-guest profiles must have a PIN">
                     <Toggle checked={requirePins} onChange={setRequirePins} />
                 </FieldRow>
 
-                <div className="border-t border-neutral-800" />
+                <Divider />
+                <SectionHeader title="Limits" />
 
                 <FieldRow label="Limit profiles" sub="Maximum number of profiles (excluding guest)">
                     <Toggle checked={limitProfiles} onChange={setLimitProfiles} />
                 </FieldRow>
                 {limitProfiles && (
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm text-neutral-400 shrink-0">Max profiles</span>
-                        <input
-                            type="number"
-                            min={1}
-                            max={50}
-                            value={maxProfiles}
-                            onChange={(e) => setMaxProfiles(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="dialog-input w-24 text-center"
-                        />
+                    <div className="flex items-center justify-between px-5 pb-4">
+                        <span className="text-sm text-neutral-400">Max profiles</span>
+                        <NumberStepper value={maxProfiles} onChange={setMaxProfiles} min={1} max={50} />
                     </div>
                 )}
 
-                <div className="border-t border-neutral-800" />
+                <Divider />
 
-                <FieldRow label="Simultaneous stream limit" sub="Max concurrent streams per profile globally">
+                <FieldRow label="Simultaneous streams" sub="Max concurrent streams per profile (global default)">
                     <Toggle checked={limitStreams} onChange={setLimitStreams} />
                 </FieldRow>
                 {limitStreams && (
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm text-neutral-400 shrink-0">Streams per profile</span>
-                        <input
-                            type="number"
-                            min={1}
-                            max={20}
-                            value={maxStreams}
-                            onChange={(e) => setMaxStreams(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="dialog-input w-24 text-center"
-                        />
+                    <div className="flex items-center justify-between px-5 pb-4">
+                        <span className="text-sm text-neutral-400">Streams per profile</span>
+                        <NumberStepper value={maxStreams} onChange={setMaxStreams} min={1} max={20} />
                     </div>
                 )}
 
-                <button
-                    onClick={saveProfileSettings}
-                    disabled={saving || !profileSettingsChanged}
-                    className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
-                >
-                    {saving ? "Saving…" : "Save"}
-                </button>
+                <div className="px-5 pb-5 pt-2">
+                    <button
+                        onClick={saveProfileSettings}
+                        disabled={saving || !profileSettingsChanged}
+                        className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all active:scale-[0.98]"
+                    >
+                        {saving ? "Saving…" : "Save Changes"}
+                    </button>
+                </div>
             </Card>
 
-            <Card title="Admin Password">
-                <div className="space-y-3">
-                    <input
-                        type="password"
-                        value={newPw}
-                        onChange={(e) => { setNewPw(e.target.value); setPwError(null); }}
-                        className="dialog-input"
-                        placeholder="New password"
-                    />
-                    <input
-                        type="password"
-                        value={confirmPw}
-                        onChange={(e) => { setConfirmPw(e.target.value); setPwError(null); }}
-                        className="dialog-input"
-                        placeholder="Confirm new password"
-                    />
-                    {pwError && <p className="text-nred text-xs">{pwError}</p>}
+            {/* Admin Password */}
+            <Card>
+                <SectionHeader title="Admin Password" />
+                <div className="px-5 pb-5 space-y-3">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-neutral-400">New password</label>
+                        <input
+                            type="password"
+                            value={newPw}
+                            onChange={(e) => { setNewPw(e.target.value); setPwError(null); }}
+                            className="dialog-input"
+                            placeholder="Enter new password"
+                            autoComplete="new-password"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-neutral-400">Confirm password</label>
+                        <input
+                            type="password"
+                            value={confirmPw}
+                            onChange={(e) => { setConfirmPw(e.target.value); setPwError(null); }}
+                            className="dialog-input"
+                            placeholder="Repeat new password"
+                            autoComplete="new-password"
+                        />
+                    </div>
+                    {pwError && (
+                        <p className="text-nred text-xs flex items-center gap-1.5">
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            {pwError}
+                        </p>
+                    )}
                     <button
                         onClick={savePassword}
                         disabled={saving || newPw.length < 4 || confirmPw.length < 4}
-                        className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
+                        className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all active:scale-[0.98]"
                     >
                         {saving ? "Saving…" : "Change Password"}
                     </button>
@@ -430,7 +567,7 @@ function SettingsTab({
     );
 }
 
-// ── Profiles Tab ──────────────────────────────────────────────────────────────
+// ── Stream Limit Cell ─────────────────────────────────────────────────────────
 
 function StreamLimitCell({
     profile,
@@ -454,27 +591,40 @@ function StreamLimitCell({
     };
 
     if (!editing) {
+        const hasOverride = profile.max_concurrent_streams !== null;
         return (
             <button
                 onClick={() => setEditing(true)}
-                className="text-xs text-neutral-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/5 text-right"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors group"
+                aria-label="Edit stream limit"
             >
-                {profile.max_concurrent_streams !== null
-                    ? profile.max_concurrent_streams
-                    : <span className="text-neutral-600">global</span>}
+                {hasOverride ? (
+                    <span className="text-xs font-semibold text-ncyan tabular-nums">{profile.max_concurrent_streams}</span>
+                ) : (
+                    <span className="text-xs text-neutral-600">global</span>
+                )}
+                <svg viewBox="0 0 24 24" className="w-3 h-3 text-neutral-700 group-hover:text-neutral-400 transition-colors" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
             </button>
         );
     }
 
     return (
-        <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                    type="checkbox"
-                    checked={override}
-                    onChange={(e) => setOverride(e.target.checked)}
-                    className="accent-ncyan"
-                />
+        <div className="flex items-center gap-2 py-1">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <div
+                    onClick={() => setOverride(!override)}
+                    className={`w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                        override ? "bg-ncyan border-ncyan" : "border-neutral-600"
+                    }`}
+                >
+                    {override && (
+                        <svg viewBox="0 0 24 24" className="w-3 h-3 text-black" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                    )}
+                </div>
                 <span className="text-xs text-neutral-400">Override</span>
             </label>
             {override && (
@@ -484,21 +634,30 @@ function StreamLimitCell({
                     max={20}
                     value={value}
                     onChange={(e) => setValue(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-16 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-ncyan"
+                    className="w-14 h-7 bg-neutral-800 border border-neutral-700 rounded-md px-2 text-xs text-white text-center focus:outline-none focus:border-ncyan"
                     autoFocus
                 />
             )}
             <button
                 onClick={handleSave}
                 disabled={saving}
-                className="text-xs text-ncyan hover:text-ncyan-light transition-colors disabled:opacity-40"
+                className="h-7 px-2.5 rounded-md bg-ncyan text-black text-xs font-bold hover:bg-ncyan/80 disabled:opacity-40 transition-all"
             >
                 {saving ? "…" : "Save"}
             </button>
-            <button onClick={() => setEditing(false)} className="text-xs text-neutral-600 hover:text-white transition-colors">✕</button>
+            <button
+                onClick={() => setEditing(false)}
+                className="h-7 w-7 flex items-center justify-center rounded-md text-neutral-600 hover:text-white hover:bg-white/5 transition-colors"
+            >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
         </div>
     );
 }
+
+// ── Profiles Tab ──────────────────────────────────────────────────────────────
 
 function ProfilesTab({
     settings,
@@ -514,6 +673,7 @@ function ProfilesTab({
     const [newName, setNewName] = useState("");
     const [creating, setCreating] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
     const createProfile = async () => {
         if (!newName.trim() || creating) return;
@@ -535,6 +695,7 @@ function ProfilesTab({
 
     const deleteProfile = async (id: string) => {
         setDeletingId(id);
+        setConfirmDeleteId(null);
         try {
             await adminFetch(`/profiles/${id}`, { method: "DELETE" });
             await onRefreshProfiles();
@@ -563,94 +724,136 @@ function ProfilesTab({
     };
 
     return (
-        <Card title="Profiles">
-            <div className="flex gap-2">
-                <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && createProfile()}
-                    className="dialog-input flex-1"
-                    placeholder="New profile name"
-                    maxLength={30}
-                />
-                <button
-                    onClick={createProfile}
-                    disabled={creating || !newName.trim()}
-                    className="px-4 py-2 rounded-lg bg-ncyan text-black text-sm font-bold hover:bg-ncyan-dark disabled:opacity-40 transition-all shrink-0"
-                >
-                    {creating ? "…" : "Create"}
-                </button>
-            </div>
+        <>
+            {/* Create profile */}
+            <Card>
+                <SectionHeader title="New Profile" />
+                <div className="px-5 pb-5 flex gap-2">
+                    <input
+                        type="text"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && createProfile()}
+                        className="dialog-input flex-1"
+                        placeholder="Profile name"
+                        maxLength={30}
+                    />
+                    <button
+                        onClick={createProfile}
+                        disabled={creating || !newName.trim()}
+                        className="px-4 py-2 rounded-lg bg-ncyan text-black text-sm font-bold hover:bg-ncyan/80 disabled:opacity-40 transition-all active:scale-95 shrink-0"
+                    >
+                        {creating ? "…" : "Create"}
+                    </button>
+                </div>
+            </Card>
 
-            {/* Column headers */}
-            <div className="flex items-center text-[10px] uppercase font-bold text-neutral-600 tracking-widest px-0 -mb-2">
-                <span className="flex-1">Profile</span>
-                <span className="w-28 text-right pr-1">Streams limit</span>
-                <span className="w-8" />
-            </div>
+            {/* Profile list */}
+            <Card>
+                <SectionHeader title={`Profiles (${profiles.length})`} />
 
-            <div className="divide-y divide-neutral-800 -mx-6 px-6">
-                {profiles.length === 0 && (
-                    <p className="text-neutral-600 text-sm py-2">No profiles yet.</p>
-                )}
-                {profiles.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 py-3">
-                        {/* Avatar + name */}
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="h-8 w-8 rounded bg-neutral-800 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                                {p.name.slice(0, 1).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                                <span className="text-sm text-foreground truncate block">{p.name}</span>
-                                <div className="flex gap-1 mt-0.5">
-                                    {p.is_guest && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 font-medium">Guest</span>
-                                    )}
-                                    {p.is_locked && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 font-medium">PIN</span>
+                {profiles.length === 0 ? (
+                    <div className="px-5 pb-8 pt-4 flex flex-col items-center gap-3 text-center">
+                        <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center">
+                            <svg viewBox="0 0 24 24" className="w-5 h-5 text-neutral-600" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                            </svg>
+                        </div>
+                        <p className="text-sm text-neutral-600">No profiles yet</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="flex items-center text-[10px] uppercase font-bold text-neutral-600 tracking-widest px-5 pb-2">
+                            <span className="flex-1">Profile</span>
+                            <span className="mr-3">Streams</span>
+                            <span className="w-8" />
+                        </div>
+                        <div className="divide-y divide-neutral-800">
+                            {profiles.map((p) => (
+                                <div key={p.id}>
+                                    <div className="flex items-center gap-3 px-5 py-3.5">
+                                        {/* Avatar */}
+                                        <div className={`h-9 w-9 rounded-lg ${avatarColor(p.name)} flex items-center justify-center text-sm font-bold text-white shrink-0`}>
+                                            {p.name.slice(0, 1).toUpperCase()}
+                                        </div>
+
+                                        {/* Name + badges */}
+                                        <div className="flex-1 min-w-0">
+                                            <span className="text-sm font-medium text-foreground truncate block">{p.name}</span>
+                                            <div className="flex gap-1 mt-0.5">
+                                                {p.is_guest && (
+                                                    <span className="text-[10px] px-1.5 py-px rounded bg-neutral-800 text-neutral-500 font-medium border border-neutral-700">Guest</span>
+                                                )}
+                                                {p.is_locked && (
+                                                    <span className="text-[10px] px-1.5 py-px rounded bg-ncyan/10 text-ncyan font-medium border border-ncyan/20">PIN</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Stream limit */}
+                                        <StreamLimitCell
+                                            profile={p}
+                                            globalLimit={settings.max_concurrent_streams}
+                                            onSave={updateStreamLimit}
+                                        />
+
+                                        {/* Delete */}
+                                        <div className="w-8 flex justify-center shrink-0">
+                                            {!p.is_guest ? (
+                                                confirmDeleteId === p.id ? null : (
+                                                    <button
+                                                        onClick={() => setConfirmDeleteId(p.id)}
+                                                        disabled={deletingId === p.id}
+                                                        className="p-1.5 rounded-md text-neutral-600 hover:text-nred hover:bg-nred/10 transition-colors disabled:opacity-40"
+                                                        aria-label={`Delete ${p.name}`}
+                                                    >
+                                                        {deletingId === p.id ? (
+                                                            <span className="text-xs w-4 block text-center">…</span>
+                                                        ) : (
+                                                            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                <polyline points="3 6 5 6 21 6" />
+                                                                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                                                                <path d="M10 11v6M14 11v6" />
+                                                                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                )
+                                            ) : (
+                                                <span className="text-neutral-800 text-xs w-8 text-center">—</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Inline delete confirm */}
+                                    {confirmDeleteId === p.id && (
+                                        <div className="flex items-center justify-between px-5 py-2.5 bg-nred/5 border-t border-nred/10">
+                                            <p className="text-xs text-nred font-medium">Delete "{p.name}"?</p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setConfirmDeleteId(null)}
+                                                    className="px-3 py-1 rounded-md text-xs font-medium text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteProfile(p.id)}
+                                                    disabled={deletingId === p.id}
+                                                    className="px-3 py-1 rounded-md text-xs font-bold bg-nred text-white hover:bg-nred/80 disabled:opacity-40 transition-all"
+                                                >
+                                                    {deletingId === p.id ? "Deleting…" : "Delete"}
+                                                </button>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
-                            </div>
+                            ))}
                         </div>
-
-                        {/* Per-profile stream limit */}
-                        <div className="w-28 flex justify-end">
-                            <StreamLimitCell
-                                profile={p}
-                                globalLimit={settings.max_concurrent_streams}
-                                onSave={updateStreamLimit}
-                            />
-                        </div>
-
-                        {/* Delete */}
-                        <div className="w-8 flex justify-center">
-                            {!p.is_guest ? (
-                                <button
-                                    onClick={() => deleteProfile(p.id)}
-                                    disabled={deletingId === p.id}
-                                    className="text-neutral-600 hover:text-nred transition-colors disabled:opacity-40 p-1"
-                                    aria-label={`Delete ${p.name}`}
-                                >
-                                    {deletingId === p.id ? (
-                                        <span className="text-xs">…</span>
-                                    ) : (
-                                        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <polyline points="3 6 5 6 21 6" />
-                                            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                                            <path d="M10 11v6M14 11v6" />
-                                            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                                        </svg>
-                                    )}
-                                </button>
-                            ) : (
-                                <span className="text-neutral-700 text-xs">—</span>
-                            )}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </Card>
+                        <div className="h-1" />
+                    </>
+                )}
+            </Card>
+        </>
     );
 }
 
