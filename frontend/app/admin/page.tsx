@@ -303,7 +303,22 @@ function SecurityTab({
 
     useEffect(() => {
         setLockEnabled(settings.app_lock_enabled);
-    }, [settings.app_lock_enabled]);
+        setLockPw("");
+        setClearLockPw(false);
+    }, [settings.app_lock_enabled, settings.app_lock_has_password]);
+
+    const turningOn = lockEnabled && !settings.app_lock_enabled;
+    const turningOff = !lockEnabled && settings.app_lock_enabled;
+    const alreadyOn = lockEnabled && settings.app_lock_enabled;
+
+    // Save enabled only when there's a meaningful change:
+    // - Turning on: requires a password
+    // - Turning off: always ok
+    // - Already on: only if changing/removing password
+    const lockSaveEnabled =
+        (turningOn && lockPw.length > 0) ||
+        turningOff ||
+        (alreadyOn && (lockPw.length > 0 || clearLockPw));
 
     const savePassword = async () => {
         if (!newPw) return;
@@ -323,6 +338,8 @@ function SecurityTab({
         setLockPw("");
         setClearLockPw(false);
     };
+
+    const pwSaveEnabled = newPw.length >= 4 && confirmPw.length >= 4;
 
     return (
         <>
@@ -345,7 +362,7 @@ function SecurityTab({
                     {pwError && <p className="text-nred text-xs">{pwError}</p>}
                     <button
                         onClick={savePassword}
-                        disabled={saving || !newPw || !confirmPw}
+                        disabled={saving || !pwSaveEnabled}
                         className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
                     >
                         {saving ? "Saving…" : "Change Password"}
@@ -358,10 +375,7 @@ function SecurityTab({
                     label="Lock the app"
                     sub="Require a password before anyone can use Filim"
                 >
-                    <Toggle
-                        checked={lockEnabled}
-                        onChange={setLockEnabled}
-                    />
+                    <Toggle checked={lockEnabled} onChange={setLockEnabled} />
                 </FieldRow>
 
                 {lockEnabled && (
@@ -369,34 +383,38 @@ function SecurityTab({
                         <input
                             type="password"
                             value={lockPw}
-                            onChange={(e) => setLockPw(e.target.value)}
+                            onChange={(e) => { setLockPw(e.target.value); setClearLockPw(false); }}
                             className="dialog-input"
                             placeholder={
-                                settings.app_lock_has_password
-                                    ? "New lock password (leave blank to keep current)"
-                                    : "Set lock password"
+                                turningOn
+                                    ? "Set a password to enable lock"
+                                    : "New lock password (leave blank to keep current)"
                             }
+                            autoFocus={turningOn}
                         />
-                        {settings.app_lock_has_password && (
-                            <label className="flex items-center gap-2 cursor-pointer">
+                        {alreadyOn && settings.app_lock_has_password && !lockPw && (
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
                                 <input
                                     type="checkbox"
                                     checked={clearLockPw}
                                     onChange={(e) => setClearLockPw(e.target.checked)}
                                     className="accent-ncyan"
                                 />
-                                <span className="text-xs text-neutral-400">Remove lock password (no password required)</span>
+                                <span className="text-xs text-neutral-400">Remove password (unlock anyone)</span>
                             </label>
+                        )}
+                        {turningOn && !lockPw && (
+                            <p className="text-xs text-neutral-500">A password is required to enable the lock.</p>
                         )}
                     </div>
                 )}
 
                 <button
                     onClick={saveLock}
-                    disabled={saving}
+                    disabled={saving || !lockSaveEnabled}
                     className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
                 >
-                    {saving ? "Saving…" : "Save Lock Settings"}
+                    {saving ? "Saving…" : "Save"}
                 </button>
             </Card>
         </>
