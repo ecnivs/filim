@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from app.core import constants
 
+_BACKEND_DIR = Path(__file__).parent.parent.parent
+
+# Load environment-specific .env file. ENVIRONMENT must already be set in the
+# shell (via run.sh / dev.sh) before Python starts so the right file is picked.
+_env_name = os.environ.get("ENVIRONMENT", "development")
+load_dotenv(_BACKEND_DIR / f".env.{_env_name}")
+
 
 class Settings:
-    """Application configuration using static constants for simplicity."""
-
     def __init__(self):
         self.environment: str = os.environ.get("ENVIRONMENT", "development")
         self.debug: bool = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
@@ -26,26 +34,23 @@ class Settings:
 
         self.flaresolverr_url: str = os.environ.get("FLARESOLVERR_URL", "http://localhost:8191/v1")
 
-        self.cors_origins: list[str] = ["*"]
+        _cors = os.environ.get("CORS_ORIGINS", "*")
+        self.cors_origins: list[str] = [o.strip() for o in _cors.split(",") if o.strip()]
 
     @property
     def project_root(self) -> str:
-        """Returns the absolute root directory of the backend."""
         return os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         )
 
     @property
     def database_url(self) -> str:
-        """Dynamically calculates the SQLite path relative to the project root."""
         db_path = os.path.join(self.project_root, "filim.db")
         return f"sqlite+aiosqlite:///{db_path}"
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Return cached application settings."""
-
     return Settings()
 
 

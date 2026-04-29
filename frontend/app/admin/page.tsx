@@ -469,10 +469,9 @@ function SettingsTab({
 
     return (
         <>
-            {/* Profiles & Access */}
+            {/* Access */}
             <Card>
                 <SectionHeader title="Access" />
-
                 <FieldRow label="Allow creating profiles" sub="Users can create profiles from the profiles page">
                     <Toggle checked={allowCreating} onChange={setAllowCreating} />
                 </FieldRow>
@@ -484,10 +483,11 @@ function SettingsTab({
                 <FieldRow label="Require PINs" sub="All non-guest profiles must have a PIN">
                     <Toggle checked={requirePins} onChange={setRequirePins} />
                 </FieldRow>
+            </Card>
 
-                <Divider />
+            {/* Limits */}
+            <Card>
                 <SectionHeader title="Limits" />
-
                 <FieldRow label="Limit profiles" sub="Maximum number of profiles (excluding guest)">
                     <Toggle checked={limitProfiles} onChange={setLimitProfiles} />
                 </FieldRow>
@@ -497,10 +497,8 @@ function SettingsTab({
                         <NumberStepper value={maxProfiles} onChange={setMaxProfiles} min={1} max={50} />
                     </div>
                 )}
-
                 <Divider />
-
-                <FieldRow label="Limit simultaneous streams" sub="Max concurrent streams per profile (global default)">
+                <FieldRow label="Simultaneous streams" sub="Max concurrent streams per profile (global default)">
                     <Toggle checked={limitStreams} onChange={setLimitStreams} />
                 </FieldRow>
                 {limitStreams && (
@@ -509,7 +507,6 @@ function SettingsTab({
                         <NumberStepper value={maxStreams} onChange={setMaxStreams} min={1} max={20} />
                     </div>
                 )}
-
                 <div className="px-5 pb-5 pt-2">
                     <button
                         onClick={saveProfileSettings}
@@ -580,13 +577,12 @@ function StreamLimitCell({
     onSave: (profileId: string, value: number | null) => Promise<void>;
 }) {
     const [editing, setEditing] = useState(false);
-    const [override, setOverride] = useState(profile.max_concurrent_streams !== null);
     const [value, setValue] = useState(profile.max_concurrent_streams ?? globalLimit ?? 2);
     const [saving, setSaving] = useState(false);
 
-    const handleSave = async () => {
+    const handleSave = async (saveValue: number | null) => {
         setSaving(true);
-        await onSave(profile.id, override ? value : null);
+        await onSave(profile.id, saveValue);
         setSaving(false);
         setEditing(false);
     };
@@ -612,40 +608,33 @@ function StreamLimitCell({
     }
 
     return (
-        <div className="flex items-center gap-2 py-1">
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                <div
-                    onClick={() => setOverride(!override)}
-                    className={`w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-                        override ? "bg-ncyan border-ncyan" : "border-neutral-600"
-                    }`}
-                >
-                    {override && (
-                        <svg viewBox="0 0 24 24" className="w-3 h-3 text-black" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                    )}
-                </div>
-                <span className="text-xs text-neutral-400">Override</span>
-            </label>
-            {override && (
-                <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={value}
-                    onChange={(e) => setValue(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-14 h-7 bg-neutral-800 border border-neutral-700 rounded-md px-2 text-xs text-white text-center focus:outline-none focus:border-ncyan"
-                    autoFocus
-                />
-            )}
+        <div className="flex items-center gap-1.5 py-1">
+            <input
+                type="number"
+                min={1}
+                max={20}
+                value={value}
+                onChange={(e) => setValue(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-14 h-7 bg-neutral-800 border border-neutral-700 rounded-md px-2 text-xs text-white text-center focus:outline-none focus:border-ncyan"
+                autoFocus
+            />
             <button
-                onClick={handleSave}
+                onClick={() => handleSave(value)}
                 disabled={saving}
                 className="h-7 px-2.5 rounded-md bg-ncyan text-black text-xs font-bold hover:bg-ncyan/80 disabled:opacity-40 transition-all"
             >
                 {saving ? "…" : "Save"}
             </button>
+            {profile.max_concurrent_streams !== null && (
+                <button
+                    onClick={() => handleSave(null)}
+                    disabled={saving}
+                    className="h-7 px-2 rounded-md text-xs text-neutral-500 hover:text-white hover:bg-white/5 disabled:opacity-40 transition-colors"
+                    title="Use global limit"
+                >
+                    Global
+                </button>
+            )}
             <button
                 onClick={() => setEditing(false)}
                 className="h-7 w-7 flex items-center justify-center rounded-md text-neutral-600 hover:text-white hover:bg-white/5 transition-colors"
