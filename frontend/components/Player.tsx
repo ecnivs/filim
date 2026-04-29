@@ -999,9 +999,12 @@ export function Player({
         const video = videoRef.current;
         if (!video) return;
         if (video.paused) {
-            void video.play();
-            setIsPlaying(true);
-            void enforceMobileFullscreen();
+            void video.play().then(() => {
+                setIsPlaying(true);
+                void enforceMobileFullscreen();
+            }).catch(() => {
+                setIsPlaying(false);
+            });
         } else {
             video.pause();
             setIsPlaying(false);
@@ -1389,9 +1392,16 @@ export function Player({
                         !isBuffering &&
                         isPlayerReady &&
                         !showStreamReloadSpinner && (
-                            <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                            // pointer-events-auto + direct onClick keeps the gesture synchronous on mobile.
+                            // The container's 300ms setTimeout path breaks Brave's autoplay gate.
+                            <button
+                                type="button"
+                                aria-label="Play"
+                                onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                                className="pointer-events-auto flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-black/60 border-2 border-white/20 backdrop-blur-md transition-transform hover:scale-110 shadow-[0_0_30px_rgba(0,0,0,0.5)] focus:outline-none"
+                            >
                                 <Play className="h-7 w-7 sm:h-10 sm:w-10 text-white fill-white ml-1 sm:ml-2 drop-shadow-lg" />
-                            </div>
+                            </button>
                         )}
                     {showStreamReloadSpinner && (
                         <div className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center">
