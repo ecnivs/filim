@@ -1,12 +1,19 @@
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import quote, unquote, urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.constants import DEFAULT_USER_AGENT
+from app.db.session import get_db
+from app.models import Profile
+from app.models.devices import Device, WatchProgress
+from app.models.settings import AppSettings
 from app.models.streams import AudioLanguageModel, StreamResponseModel
 from app.streams.service import StreamService
 
@@ -137,6 +144,57 @@ async def proxy_stream(request: Request, url: str = Query(...)) -> StreamingResp
     )
 
 
+async def _check_concurrent_stream_limit(
+    profile_id: str | None,
+    device_token: str | None,
+    db: AsyncSession,
+) -> None:
+    if not profile_id or not device_token:
+        return
+
+    app_settings = await db.get(AppSettings, "singleton")
+    profile = await db.get(Profile, profile_id)
+    if profile is None:
+        return
+
+    # Per-profile limit overrides global; None means unlimited
+    limit = profile.max_concurrent_streams
+    if limit is None and app_settings:
+        limit = app_settings.max_concurrent_streams
+    if limit is None:
+        return
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+    # Find current device by token
+    device_row = (
+        await db.execute(select(Device).where(Device.mac_address == device_token))
+    ).scalar_one_or_none()
+    current_device_id = device_row.id if device_row else None
+
+    # Active device_ids streaming on this profile in the last 5 minutes
+    active_stmt = (
+        select(WatchProgress.device_id)
+        .where(
+            WatchProgress.profile_id == profile_id,
+            WatchProgress.last_updated >= cutoff,
+            WatchProgress.is_finished == False,  # noqa: E712
+        )
+        .distinct()
+    )
+    active_ids = set((await db.execute(active_stmt)).scalars().all())
+
+    # If this device is already streaming, it's a continuation — allow
+    if current_device_id and current_device_id in active_ids:
+        return
+
+    if len(active_ids) >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Stream limit reached: {limit} simultaneous stream(s) allowed for this profile",
+        )
+
+
 @router.get("/{show_id}/episodes/{episode}/stream")
 async def get_episode_stream(
     show_id: str,
@@ -150,7 +208,12 @@ async def get_episode_stream(
         pattern="^v[0-9]+$",
     ),
     device_token: Optional[str] = Query(None),
+    request: Request = None,
+    db: AsyncSession = Depends(get_db),
 ) -> StreamResponseModel:
+    profile_id = request.headers.get("X-Profile-Id") if request else None
+    await _check_concurrent_stream_limit(profile_id, device_token, db)
+
     service = _get_stream_service()
 
     resolved_language, effective_mode = _resolve_language_and_mode(

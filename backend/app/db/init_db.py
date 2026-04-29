@@ -174,6 +174,26 @@ async def _init_db(db_engine: AsyncEngine) -> None:
         except Exception:
             await db.rollback()
 
+        # Add max_concurrent_streams to app_settings if missing
+        try:
+            await db.execute(
+                text("ALTER TABLE app_settings ADD COLUMN max_concurrent_streams INTEGER")
+            )
+            await db.commit()
+            logger.info("Migration: Added max_concurrent_streams to app_settings")
+        except Exception:
+            await db.rollback()
+
+        # Add max_concurrent_streams to profiles if missing
+        try:
+            await db.execute(
+                text("ALTER TABLE profiles ADD COLUMN max_concurrent_streams INTEGER")
+            )
+            await db.commit()
+            logger.info("Migration: Added max_concurrent_streams to profiles")
+        except Exception:
+            await db.rollback()
+
         # Initialize AppSettings singleton
         import hashlib
         app_settings = await db.get(AppSettings, "singleton")

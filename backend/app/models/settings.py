@@ -21,3 +21,4 @@ class AppSettings(Base):
     guest_profile_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     max_profiles: Mapped[int | None] = mapped_column(Integer, nullable=True)
     require_profile_pins: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_concurrent_streams: Mapped[int | None] = mapped_column(Integer, nullable=True)

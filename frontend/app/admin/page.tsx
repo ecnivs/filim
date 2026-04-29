@@ -16,6 +16,7 @@ type Settings = {
     guest_profile_enabled: boolean;
     max_profiles: number | null;
     require_profile_pins: boolean;
+    max_concurrent_streams: number | null;
 };
 
 type ProfileEntry = {
@@ -23,6 +24,7 @@ type ProfileEntry = {
     name: string;
     is_locked: boolean;
     is_guest: boolean;
+    max_concurrent_streams: number | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -69,11 +71,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function FieldRow({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
     return (
         <div className="flex items-center justify-between gap-4">
-            <div>
+            <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">{label}</p>
                 {sub && <p className="text-xs text-neutral-500 mt-0.5">{sub}</p>}
             </div>
-            {children}
+            <div className="shrink-0">{children}</div>
         </div>
     );
 }
@@ -107,12 +109,9 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
         <div className="min-h-screen bg-background flex items-center justify-center px-6">
             <div className="w-full max-w-xs space-y-8 text-center">
                 <div>
-                    <div className="text-ncyan text-3xl font-black tracking-tighter uppercase mb-1">
-                        Filim
-                    </div>
+                    <div className="text-ncyan text-3xl font-black tracking-tighter uppercase mb-1">Filim</div>
                     <p className="text-neutral-400 text-sm">Admin Panel</p>
                 </div>
-
                 <div className="space-y-3">
                     <input
                         type="password"
@@ -125,7 +124,6 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
                     />
                     {error && <p className="text-nred text-xs font-medium">{error}</p>}
                 </div>
-
                 <button
                     onClick={handleLogin}
                     disabled={loading || !password}
@@ -133,7 +131,6 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 >
                     {loading ? "Signing in…" : "Sign In"}
                 </button>
-
                 <Link href="/" className="block text-xs text-neutral-600 hover:text-neutral-400 transition-colors">
                     ← Back to Filim
                 </Link>
@@ -145,7 +142,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-    const [tab, setTab] = useState<"profiles" | "security">("profiles");
+    const [tab, setTab] = useState<"settings" | "profiles">("settings");
     const [settings, setSettings] = useState<Settings | null>(null);
     const [profiles, setProfiles] = useState<ProfileEntry[]>([]);
     const [loadingSettings, setLoadingSettings] = useState(true);
@@ -207,11 +204,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-neutral-800">
                 <div className="flex items-center justify-between px-6 h-14">
                     <div className="flex items-center gap-3">
-                        <Link
-                            href="/"
-                            className="text-neutral-500 hover:text-white transition-colors"
-                            aria-label="Back to app"
-                        >
+                        <Link href="/" className="text-neutral-500 hover:text-white transition-colors" aria-label="Back to app">
                             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="15 18 9 12 15 6" />
                             </svg>
@@ -219,10 +212,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         <span className="text-ncyan font-black tracking-tighter uppercase text-lg">Filim</span>
                         <span className="text-neutral-600 text-sm">/ Admin</span>
                     </div>
-                    <button
-                        onClick={() => { clearAdminToken(); onLogout(); }}
-                        className="text-xs text-neutral-500 hover:text-white transition-colors"
-                    >
+                    <button onClick={() => { clearAdminToken(); onLogout(); }} className="text-xs text-neutral-500 hover:text-white transition-colors">
                         Sign out
                     </button>
                 </div>
@@ -230,14 +220,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
             <div className="border-b border-neutral-800 px-6">
                 <div className="flex gap-1">
-                    {(["profiles", "security"] as const).map((t) => (
+                    {(["settings", "profiles"] as const).map((t) => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
                             className={`py-3 px-4 text-sm font-medium capitalize border-b-2 transition-colors -mb-px ${
-                                tab === t
-                                    ? "border-ncyan text-ncyan"
-                                    : "border-transparent text-neutral-500 hover:text-white"
+                                tab === t ? "border-ncyan text-ncyan" : "border-transparent text-neutral-500 hover:text-white"
                             }`}
                         >
                             {t}
@@ -252,30 +240,22 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 ) : !settings ? (
                     <div className="text-nred text-sm">
                         Failed to load settings.{" "}
-                        <button onClick={() => { void fetchSettings(); void fetchProfiles(); }} className="underline">
-                            Retry
-                        </button>
+                        <button onClick={() => { void fetchSettings(); void fetchProfiles(); }} className="underline">Retry</button>
                     </div>
-                ) : tab === "profiles" ? (
+                ) : tab === "settings" ? (
+                    <SettingsTab settings={settings} onPatch={patchSettings} saving={saving} />
+                ) : (
                     <ProfilesTab
                         settings={settings}
                         profiles={profiles}
-                        onPatch={patchSettings}
                         onRefreshProfiles={fetchProfiles}
-                        saving={saving}
                         showToast={showToast}
                     />
-                ) : (
-                    <SecurityTab settings={settings} onPatch={patchSettings} saving={saving} />
                 )}
             </div>
 
             {toast && (
-                <div
-                    className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg text-sm font-medium shadow-dialog transition-all ${
-                        toast.ok ? "bg-ncyan text-black" : "bg-nred text-white"
-                    }`}
-                >
+                <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg text-sm font-medium shadow-dialog transition-all ${toast.ok ? "bg-ncyan text-black" : "bg-nred text-white"}`}>
                     {toast.msg}
                 </div>
             )}
@@ -283,32 +263,28 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     );
 }
 
-// ── Profiles Tab ──────────────────────────────────────────────────────────────
+// ── Settings Tab ──────────────────────────────────────────────────────────────
 
-function ProfilesTab({
+function SettingsTab({
     settings,
-    profiles,
     onPatch,
-    onRefreshProfiles,
     saving,
-    showToast,
 }: {
     settings: Settings;
-    profiles: ProfileEntry[];
     onPatch: (patch: Record<string, unknown>) => Promise<void>;
-    onRefreshProfiles: () => Promise<void>;
     saving: boolean;
-    showToast: (msg: string, ok?: boolean) => void;
 }) {
     const [allowCreating, setAllowCreating] = useState(settings.allow_creating_profiles);
     const [guestEnabled, setGuestEnabled] = useState(settings.guest_profile_enabled);
     const [requirePins, setRequirePins] = useState(settings.require_profile_pins);
     const [limitProfiles, setLimitProfiles] = useState(settings.max_profiles !== null);
     const [maxProfiles, setMaxProfiles] = useState(settings.max_profiles ?? 5);
+    const [limitStreams, setLimitStreams] = useState(settings.max_concurrent_streams !== null);
+    const [maxStreams, setMaxStreams] = useState(settings.max_concurrent_streams ?? 2);
 
-    const [newName, setNewName] = useState("");
-    const [creating, setCreating] = useState(false);
-    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [newPw, setNewPw] = useState("");
+    const [confirmPw, setConfirmPw] = useState("");
+    const [pwError, setPwError] = useState<string | null>(null);
 
     useEffect(() => {
         setAllowCreating(settings.allow_creating_profiles);
@@ -316,14 +292,18 @@ function ProfilesTab({
         setRequirePins(settings.require_profile_pins);
         setLimitProfiles(settings.max_profiles !== null);
         setMaxProfiles(settings.max_profiles ?? 5);
+        setLimitStreams(settings.max_concurrent_streams !== null);
+        setMaxStreams(settings.max_concurrent_streams ?? 2);
     }, [settings]);
 
-    const settingsChanged =
+    const profileSettingsChanged =
         allowCreating !== settings.allow_creating_profiles ||
         guestEnabled !== settings.guest_profile_enabled ||
         requirePins !== settings.require_profile_pins ||
         limitProfiles !== (settings.max_profiles !== null) ||
-        (limitProfiles && maxProfiles !== (settings.max_profiles ?? 5));
+        (limitProfiles && maxProfiles !== (settings.max_profiles ?? 5)) ||
+        limitStreams !== (settings.max_concurrent_streams !== null) ||
+        (limitStreams && maxStreams !== (settings.max_concurrent_streams ?? 2));
 
     const saveProfileSettings = async () => {
         const patch: Record<string, unknown> = {
@@ -336,8 +316,204 @@ function ProfilesTab({
         } else {
             patch.clear_max_profiles = true;
         }
+        if (limitStreams) {
+            patch.max_concurrent_streams = maxStreams;
+        } else {
+            patch.clear_max_concurrent_streams = true;
+        }
         await onPatch(patch);
     };
+
+    const savePassword = async () => {
+        if (!newPw) return;
+        if (newPw !== confirmPw) { setPwError("Passwords don't match"); return; }
+        if (newPw.length < 4) { setPwError("Min 4 characters"); return; }
+        setPwError(null);
+        await onPatch({ admin_password: newPw });
+        setNewPw("");
+        setConfirmPw("");
+    };
+
+    return (
+        <>
+            <Card title="Profiles">
+                <FieldRow label="Allow creating profiles" sub="Users can create profiles from the profiles page">
+                    <Toggle checked={allowCreating} onChange={setAllowCreating} />
+                </FieldRow>
+
+                <div className="border-t border-neutral-800" />
+
+                <FieldRow label="Guest profile" sub="Show the Guest profile on the profiles page">
+                    <Toggle checked={guestEnabled} onChange={setGuestEnabled} />
+                </FieldRow>
+
+                <div className="border-t border-neutral-800" />
+
+                <FieldRow label="Require PINs" sub="All profiles must have a PIN to be created">
+                    <Toggle checked={requirePins} onChange={setRequirePins} />
+                </FieldRow>
+
+                <div className="border-t border-neutral-800" />
+
+                <FieldRow label="Limit profiles" sub="Maximum number of profiles (excluding guest)">
+                    <Toggle checked={limitProfiles} onChange={setLimitProfiles} />
+                </FieldRow>
+                {limitProfiles && (
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm text-neutral-400 shrink-0">Max profiles</span>
+                        <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={maxProfiles}
+                            onChange={(e) => setMaxProfiles(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="dialog-input w-24 text-center"
+                        />
+                    </div>
+                )}
+
+                <div className="border-t border-neutral-800" />
+
+                <FieldRow label="Simultaneous stream limit" sub="Max concurrent streams per profile globally">
+                    <Toggle checked={limitStreams} onChange={setLimitStreams} />
+                </FieldRow>
+                {limitStreams && (
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm text-neutral-400 shrink-0">Streams per profile</span>
+                        <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={maxStreams}
+                            onChange={(e) => setMaxStreams(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="dialog-input w-24 text-center"
+                        />
+                    </div>
+                )}
+
+                <button
+                    onClick={saveProfileSettings}
+                    disabled={saving || !profileSettingsChanged}
+                    className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
+                >
+                    {saving ? "Saving…" : "Save"}
+                </button>
+            </Card>
+
+            <Card title="Admin Password">
+                <div className="space-y-3">
+                    <input
+                        type="password"
+                        value={newPw}
+                        onChange={(e) => { setNewPw(e.target.value); setPwError(null); }}
+                        className="dialog-input"
+                        placeholder="New password"
+                    />
+                    <input
+                        type="password"
+                        value={confirmPw}
+                        onChange={(e) => { setConfirmPw(e.target.value); setPwError(null); }}
+                        className="dialog-input"
+                        placeholder="Confirm new password"
+                    />
+                    {pwError && <p className="text-nred text-xs">{pwError}</p>}
+                    <button
+                        onClick={savePassword}
+                        disabled={saving || newPw.length < 4 || confirmPw.length < 4}
+                        className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
+                    >
+                        {saving ? "Saving…" : "Change Password"}
+                    </button>
+                </div>
+            </Card>
+        </>
+    );
+}
+
+// ── Profiles Tab ──────────────────────────────────────────────────────────────
+
+function StreamLimitCell({
+    profile,
+    globalLimit,
+    onSave,
+}: {
+    profile: ProfileEntry;
+    globalLimit: number | null;
+    onSave: (profileId: string, value: number | null) => Promise<void>;
+}) {
+    const [editing, setEditing] = useState(false);
+    const [override, setOverride] = useState(profile.max_concurrent_streams !== null);
+    const [value, setValue] = useState(profile.max_concurrent_streams ?? globalLimit ?? 2);
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async () => {
+        setSaving(true);
+        await onSave(profile.id, override ? value : null);
+        setSaving(false);
+        setEditing(false);
+    };
+
+    if (!editing) {
+        return (
+            <button
+                onClick={() => setEditing(true)}
+                className="text-xs text-neutral-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/5 text-right"
+            >
+                {profile.max_concurrent_streams !== null
+                    ? profile.max_concurrent_streams
+                    : <span className="text-neutral-600">global</span>}
+            </button>
+        );
+    }
+
+    return (
+        <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                    type="checkbox"
+                    checked={override}
+                    onChange={(e) => setOverride(e.target.checked)}
+                    className="accent-ncyan"
+                />
+                <span className="text-xs text-neutral-400">Override</span>
+            </label>
+            {override && (
+                <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={value}
+                    onChange={(e) => setValue(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-ncyan"
+                    autoFocus
+                />
+            )}
+            <button
+                onClick={handleSave}
+                disabled={saving}
+                className="text-xs text-ncyan hover:text-ncyan-light transition-colors disabled:opacity-40"
+            >
+                {saving ? "…" : "Save"}
+            </button>
+            <button onClick={() => setEditing(false)} className="text-xs text-neutral-600 hover:text-white transition-colors">✕</button>
+        </div>
+    );
+}
+
+function ProfilesTab({
+    settings,
+    profiles,
+    onRefreshProfiles,
+    showToast,
+}: {
+    settings: Settings;
+    profiles: ProfileEntry[];
+    onRefreshProfiles: () => Promise<void>;
+    showToast: (msg: string, ok?: boolean) => void;
+}) {
+    const [newName, setNewName] = useState("");
+    const [creating, setCreating] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const createProfile = async () => {
         if (!newName.trim() || creating) return;
@@ -370,100 +546,85 @@ function ProfilesTab({
         }
     };
 
+    const updateStreamLimit = async (profileId: string, value: number | null) => {
+        try {
+            const body = value === null
+                ? { clear_max_concurrent_streams: true }
+                : { max_concurrent_streams: value };
+            await adminFetch(`/profiles/${profileId}`, {
+                method: "PATCH",
+                body: JSON.stringify(body),
+            });
+            await onRefreshProfiles();
+            showToast("Saved");
+        } catch (e: any) {
+            showToast(e.message ?? "Error", false);
+        }
+    };
+
     return (
-        <>
-            <Card title="Settings">
-                <FieldRow label="Allow creating profiles" sub="Users can create new profiles from the profiles page">
-                    <Toggle checked={allowCreating} onChange={setAllowCreating} />
-                </FieldRow>
-
-                <div className="border-t border-neutral-800" />
-
-                <FieldRow label="Guest profile" sub="Show the Guest profile on the profiles page">
-                    <Toggle checked={guestEnabled} onChange={setGuestEnabled} />
-                </FieldRow>
-
-                <div className="border-t border-neutral-800" />
-
-                <FieldRow label="Require PINs" sub="All profiles must have a PIN to be created">
-                    <Toggle checked={requirePins} onChange={setRequirePins} />
-                </FieldRow>
-
-                <div className="border-t border-neutral-800" />
-
-                <FieldRow label="Limit profiles" sub="Set a maximum number of profiles (excluding guest)">
-                    <Toggle checked={limitProfiles} onChange={setLimitProfiles} />
-                </FieldRow>
-
-                {limitProfiles && (
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm text-neutral-400 shrink-0">Max profiles</span>
-                        <input
-                            type="number"
-                            min={1}
-                            max={50}
-                            value={maxProfiles}
-                            onChange={(e) => setMaxProfiles(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="dialog-input w-24 text-center"
-                        />
-                    </div>
-                )}
-
+        <Card title="Profiles">
+            <div className="flex gap-2">
+                <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && createProfile()}
+                    className="dialog-input flex-1"
+                    placeholder="New profile name"
+                    maxLength={30}
+                />
                 <button
-                    onClick={saveProfileSettings}
-                    disabled={saving || !settingsChanged}
-                    className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
+                    onClick={createProfile}
+                    disabled={creating || !newName.trim()}
+                    className="px-4 py-2 rounded-lg bg-ncyan text-black text-sm font-bold hover:bg-ncyan-dark disabled:opacity-40 transition-all shrink-0"
                 >
-                    {saving ? "Saving…" : "Save"}
+                    {creating ? "…" : "Create"}
                 </button>
-            </Card>
+            </div>
 
-            <Card title="Profiles">
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && createProfile()}
-                        className="dialog-input flex-1"
-                        placeholder="New profile name"
-                        maxLength={30}
-                    />
-                    <button
-                        onClick={createProfile}
-                        disabled={creating || !newName.trim()}
-                        className="px-4 py-2 rounded-lg bg-ncyan text-black text-sm font-bold hover:bg-ncyan-dark disabled:opacity-40 transition-all shrink-0"
-                    >
-                        {creating ? "…" : "Create"}
-                    </button>
-                </div>
+            {/* Column headers */}
+            <div className="flex items-center text-[10px] uppercase font-bold text-neutral-600 tracking-widest px-0 -mb-2">
+                <span className="flex-1">Profile</span>
+                <span className="w-28 text-right pr-1">Streams limit</span>
+                <span className="w-8" />
+            </div>
 
-                <div className="divide-y divide-neutral-800 -mx-6 px-6">
-                    {profiles.length === 0 && (
-                        <p className="text-neutral-600 text-sm py-2">No profiles yet.</p>
-                    )}
-                    {profiles.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between py-3">
-                            <div className="flex items-center gap-3">
-                                <div className="h-8 w-8 rounded bg-neutral-800 flex items-center justify-center text-sm font-bold text-white">
-                                    {p.name.slice(0, 1).toUpperCase()}
-                                </div>
-                                <div>
-                                    <span className="text-sm text-foreground">{p.name}</span>
-                                    <div className="flex gap-1 mt-0.5">
-                                        {p.is_guest && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 font-medium">
-                                                Guest
-                                            </span>
-                                        )}
-                                        {p.is_locked && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 font-medium">
-                                                PIN
-                                            </span>
-                                        )}
-                                    </div>
+            <div className="divide-y divide-neutral-800 -mx-6 px-6">
+                {profiles.length === 0 && (
+                    <p className="text-neutral-600 text-sm py-2">No profiles yet.</p>
+                )}
+                {profiles.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 py-3">
+                        {/* Avatar + name */}
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="h-8 w-8 rounded bg-neutral-800 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                                {p.name.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                                <span className="text-sm text-foreground truncate block">{p.name}</span>
+                                <div className="flex gap-1 mt-0.5">
+                                    {p.is_guest && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 font-medium">Guest</span>
+                                    )}
+                                    {p.is_locked && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 font-medium">PIN</span>
+                                    )}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Per-profile stream limit */}
+                        <div className="w-28 flex justify-end">
+                            <StreamLimitCell
+                                profile={p}
+                                globalLimit={settings.max_concurrent_streams}
+                                onSave={updateStreamLimit}
+                            />
+                        </div>
+
+                        {/* Delete */}
+                        <div className="w-8 flex justify-center">
                             {!p.is_guest ? (
                                 <button
                                     onClick={() => deleteProfile(p.id)}
@@ -483,68 +644,11 @@ function ProfilesTab({
                                     )}
                                 </button>
                             ) : (
-                                <span className="text-xs text-neutral-700 pr-1">—</span>
+                                <span className="text-neutral-700 text-xs">—</span>
                             )}
                         </div>
-                    ))}
-                </div>
-            </Card>
-        </>
-    );
-}
-
-// ── Security Tab ──────────────────────────────────────────────────────────────
-
-function SecurityTab({
-    settings: _settings,
-    onPatch,
-    saving,
-}: {
-    settings: Settings;
-    onPatch: (patch: Record<string, unknown>) => Promise<void>;
-    saving: boolean;
-}) {
-    const [newPw, setNewPw] = useState("");
-    const [confirmPw, setConfirmPw] = useState("");
-    const [pwError, setPwError] = useState<string | null>(null);
-
-    const savePassword = async () => {
-        if (!newPw) return;
-        if (newPw !== confirmPw) { setPwError("Passwords don't match"); return; }
-        if (newPw.length < 4) { setPwError("Min 4 characters"); return; }
-        setPwError(null);
-        await onPatch({ admin_password: newPw });
-        setNewPw("");
-        setConfirmPw("");
-    };
-
-    const pwSaveEnabled = newPw.length >= 4 && confirmPw.length >= 4;
-
-    return (
-        <Card title="Admin Password">
-            <div className="space-y-3">
-                <input
-                    type="password"
-                    value={newPw}
-                    onChange={(e) => { setNewPw(e.target.value); setPwError(null); }}
-                    className="dialog-input"
-                    placeholder="New password"
-                />
-                <input
-                    type="password"
-                    value={confirmPw}
-                    onChange={(e) => { setConfirmPw(e.target.value); setPwError(null); }}
-                    className="dialog-input"
-                    placeholder="Confirm new password"
-                />
-                {pwError && <p className="text-nred text-xs">{pwError}</p>}
-                <button
-                    onClick={savePassword}
-                    disabled={saving || !pwSaveEnabled}
-                    className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
-                >
-                    {saving ? "Saving…" : "Change Password"}
-                </button>
+                    </div>
+                ))}
             </div>
         </Card>
     );
@@ -559,13 +663,7 @@ export default function AdminPage() {
         setAuthed(!!getAdminToken());
     }, []);
 
-    if (authed === null) {
-        return <div className="min-h-screen bg-background" />;
-    }
-
-    if (!authed) {
-        return <LoginScreen onLogin={() => setAuthed(true)} />;
-    }
-
+    if (authed === null) return <div className="min-h-screen bg-background" />;
+    if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
     return <Dashboard onLogout={() => setAuthed(false)} />;
 }

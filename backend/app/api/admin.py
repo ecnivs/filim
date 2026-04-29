@@ -77,6 +77,7 @@ async def get_public_settings(db: AsyncSession = Depends(get_db)) -> dict:
         "guest_profile_enabled": s.guest_profile_enabled,
         "max_profiles": s.max_profiles,
         "require_profile_pins": s.require_profile_pins,
+        "max_concurrent_streams": s.max_concurrent_streams,
     }
 
 
@@ -89,6 +90,8 @@ class UpdateSettingsBody(BaseModel):
     max_profiles: int | None = None
     clear_max_profiles: bool | None = None
     require_profile_pins: bool | None = None
+    max_concurrent_streams: int | None = None
+    clear_max_concurrent_streams: bool | None = None
 
 
 class AdminSettingsResponse(BaseModel):
@@ -96,6 +99,7 @@ class AdminSettingsResponse(BaseModel):
     guest_profile_enabled: bool
     max_profiles: int | None
     require_profile_pins: bool
+    max_concurrent_streams: int | None
 
 
 @router.get("/settings")
@@ -107,6 +111,7 @@ async def get_settings(
         guest_profile_enabled=s.guest_profile_enabled,
         max_profiles=s.max_profiles,
         require_profile_pins=s.require_profile_pins,
+        max_concurrent_streams=s.max_concurrent_streams,
     )
 
 
@@ -135,16 +140,24 @@ async def update_settings(
     if body.require_profile_pins is not None:
         s.require_profile_pins = body.require_profile_pins
 
+    if body.clear_max_concurrent_streams:
+        s.max_concurrent_streams = None
+    elif body.max_concurrent_streams is not None:
+        s.max_concurrent_streams = max(1, body.max_concurrent_streams)
+
     await db.commit()
     password_changed = body.admin_password is not None
     return {"status": "ok", "password_changed": password_changed}
 
+
+# ── Admin profiles ────────────────────────────────────────────────────────────
 
 class AdminProfileResponse(BaseModel):
     id: str
     name: str
     is_locked: bool
     is_guest: bool
+    max_concurrent_streams: int | None
 
 
 @router.get("/profiles")
@@ -156,7 +169,11 @@ async def admin_list_profiles(
     return {
         "items": [
             AdminProfileResponse(
-                id=r.id, name=r.name, is_locked=r.is_locked, is_guest=r.is_guest
+                id=r.id,
+                name=r.name,
+                is_locked=r.is_locked,
+                is_guest=r.is_guest,
+                max_concurrent_streams=r.max_concurrent_streams,
             )
             for r in rows
         ]
@@ -177,7 +194,41 @@ async def admin_create_profile(
     service = ProfileService(db=db)
     profile = await service.create_profile(name=body.name, pin=body.pin)
     return AdminProfileResponse(
-        id=profile.id, name=profile.name, is_locked=profile.is_locked, is_guest=profile.is_guest
+        id=profile.id,
+        name=profile.name,
+        is_locked=profile.is_locked,
+        is_guest=profile.is_guest,
+        max_concurrent_streams=None,
+    )
+
+
+class AdminUpdateProfileBody(BaseModel):
+    max_concurrent_streams: int | None = None
+    clear_max_concurrent_streams: bool | None = None
+
+
+@router.patch("/profiles/{profile_id}")
+async def admin_update_profile(
+    profile_id: str,
+    body: AdminUpdateProfileBody,
+    _: AppSettings = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AdminProfileResponse:
+    profile = await db.get(Profile, profile_id)
+    if profile is None:
+        raise HTTPException(404, "Profile not found")
+    if body.clear_max_concurrent_streams:
+        profile.max_concurrent_streams = None
+    elif body.max_concurrent_streams is not None:
+        profile.max_concurrent_streams = max(1, body.max_concurrent_streams)
+    await db.commit()
+    await db.refresh(profile)
+    return AdminProfileResponse(
+        id=profile.id,
+        name=profile.name,
+        is_locked=profile.is_locked,
+        is_guest=profile.is_guest,
+        max_concurrent_streams=profile.max_concurrent_streams,
     )
 
 
