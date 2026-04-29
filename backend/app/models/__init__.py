@@ -7,6 +7,7 @@ from app.models.preferences import (
     ProfileRating,
 )
 from app.models.profiles import Profile
+from app.models.settings import AppSettings
 
 __all__ = [
     "Base",
@@ -19,4 +20,5 @@ __all__ = [
     "ProfileListEntry",
     "ProfileRating",
     "ProfileAudioPreference",
+    "AppSettings",
 ]

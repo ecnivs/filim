@@ -3,7 +3,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.models.settings import AppSettings
 from app.profiles import ProfileModel, ProfileService
+
+SETTINGS_ID = "singleton"
 
 
 class ProfileResponse(BaseModel):
@@ -46,8 +49,12 @@ def _get_profile_service(db: AsyncSession = Depends(get_db)) -> ProfileService:
 @router.get("")
 async def list_profiles(
     service: ProfileService = Depends(_get_profile_service),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, list[ProfileResponse]]:
     profiles = await service.list_profiles()
+    settings = await db.get(AppSettings, SETTINGS_ID)
+    if settings and not settings.guest_profile_enabled:
+        profiles = [p for p in profiles if not p.is_guest]
     return {"items": [ProfileResponse.from_model(p) for p in profiles]}
 
 
@@ -66,7 +73,19 @@ async def get_profile(
 async def create_profile(
     body: CreateProfileBody,
     service: ProfileService = Depends(_get_profile_service),
+    db: AsyncSession = Depends(get_db),
 ) -> ProfileResponse:
+    settings = await db.get(AppSettings, SETTINGS_ID)
+    if settings and not settings.allow_creating_profiles:
+        raise HTTPException(status_code=403, detail="Profile creation is disabled")
+    if settings and settings.max_profiles is not None:
+        existing = await service.list_profiles()
+        non_guest = [p for p in existing if not p.is_guest]
+        if len(non_guest) >= settings.max_profiles:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Profile limit of {settings.max_profiles} reached",
+            )
     profile = await service.create_profile(name=body.name, pin=body.pin)
     return ProfileResponse.from_model(profile)
 

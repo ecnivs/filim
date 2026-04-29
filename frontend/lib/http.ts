@@ -80,6 +80,14 @@ class ApiClient {
         return this.request<T>(url, "POST", body, options);
     }
 
+    async patch<T>(url: string, body?: any, options?: RequestOptions): Promise<{ data: T }> {
+        return this.request<T>(url, "PATCH", body, options);
+    }
+
+    async delete<T>(url: string, options?: RequestOptions): Promise<{ data: T }> {
+        return this.request<T>(url, "DELETE", undefined, options);
+    }
+
 }
 
 export const api = new ApiClient();

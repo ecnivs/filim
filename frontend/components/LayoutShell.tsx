@@ -28,7 +28,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (!isReady) return;
-        if (!profile && pathname !== "/profiles") {
+        if (!profile && pathname !== "/profiles" && !pathname.startsWith("/admin")) {
             router.replace("/profiles");
         }
     }, [isReady, profile, pathname, router]);
@@ -89,7 +89,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
         }
     };
 
-    if (pathname.startsWith("/watch/")) {
+    if (pathname.startsWith("/watch/") || pathname.startsWith("/admin")) {
         return <>{children}</>;
     }
 
@@ -194,6 +194,19 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                             <p className="text-[10px] uppercase font-bold text-neutral-500 tracking-widest mb-1">Switch Profile</p>
                                             <ProfileDropdownItems currentId={profile?.id} />
                                         </div>
+
+                                        <div className="border-t border-neutral-800 my-1" />
+
+                                        <Link
+                                            href="/admin"
+                                            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
+                                        >
+                                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <circle cx="12" cy="12" r="3" />
+                                                <path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14" />
+                                            </svg>
+                                            Admin Panel
+                                        </Link>
 
                                         <div className="border-t border-neutral-800 my-1" />
 

@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.utils import normalize_genre_list
 from app.db.session import engine
-from app.models import Base, Profile
+from app.models import AppSettings, Base, Profile
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,22 @@ async def _init_db(db_engine: AsyncEngine) -> None:
             )
             db.add(guest_profile)
             await db.commit()
+
+        # Initialize AppSettings singleton
+        import hashlib
+        app_settings = await db.get(AppSettings, "singleton")
+        if app_settings is None:
+            default_hash = hashlib.sha256(b"filim").hexdigest()
+            app_settings = AppSettings(
+                id="singleton",
+                admin_password_hash=default_hash,
+                app_lock_enabled=False,
+                allow_creating_profiles=True,
+                guest_profile_enabled=True,
+            )
+            db.add(app_settings)
+            await db.commit()
+            logger.info("Admin settings initialized with default password")
 
 
 def main() -> None:

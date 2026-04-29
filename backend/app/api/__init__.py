@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api import (
+    admin,
     catalog,
     preferences,
     profiles,
@@ -11,6 +12,7 @@ from app.api import (
 
 router = APIRouter()
 
+router.include_router(admin.router, prefix="/admin", tags=["admin"])
 router.include_router(catalog.router, prefix="/catalog", tags=["catalog"])
 router.include_router(streams.router, prefix="/stream", tags=["streams"])
 router.include_router(profiles.router, prefix="/profiles", tags=["profiles"])
