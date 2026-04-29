@@ -17,9 +17,7 @@ class AppSettings(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    app_lock_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    app_lock_password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
-
     allow_creating_profiles: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     guest_profile_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     max_profiles: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    require_profile_pins: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

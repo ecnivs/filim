@@ -12,11 +12,10 @@ import {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Settings = {
-    app_lock_enabled: boolean;
-    app_lock_has_password: boolean;
     allow_creating_profiles: boolean;
     guest_profile_enabled: boolean;
     max_profiles: number | null;
+    require_profile_pins: boolean;
 };
 
 type ProfileEntry = {
@@ -146,7 +145,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-    const [tab, setTab] = useState<"security" | "profiles">("security");
+    const [tab, setTab] = useState<"profiles" | "security">("profiles");
     const [settings, setSettings] = useState<Settings | null>(null);
     const [profiles, setProfiles] = useState<ProfileEntry[]>([]);
     const [loadingSettings, setLoadingSettings] = useState(true);
@@ -205,7 +204,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     return (
         <div className="min-h-screen bg-background">
-            {/* Header */}
             <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-neutral-800">
                 <div className="flex items-center justify-between px-6 h-14">
                     <div className="flex items-center gap-3">
@@ -230,10 +228,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
             </header>
 
-            {/* Tabs */}
             <div className="border-b border-neutral-800 px-6">
                 <div className="flex gap-1">
-                    {(["security", "profiles"] as const).map((t) => (
+                    {(["profiles", "security"] as const).map((t) => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
@@ -253,10 +250,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 {loadingSettings ? (
                     <div className="text-neutral-600 text-sm">Loading…</div>
                 ) : !settings ? (
-                    <div className="text-nred text-sm">Failed to load settings. <button onClick={() => { void fetchSettings(); void fetchProfiles(); }} className="underline">Retry</button></div>
-                ) : tab === "security" ? (
-                    <SecurityTab settings={settings} onPatch={patchSettings} saving={saving} />
-                ) : (
+                    <div className="text-nred text-sm">
+                        Failed to load settings.{" "}
+                        <button onClick={() => { void fetchSettings(); void fetchProfiles(); }} className="underline">
+                            Retry
+                        </button>
+                    </div>
+                ) : tab === "profiles" ? (
                     <ProfilesTab
                         settings={settings}
                         profiles={profiles}
@@ -265,10 +265,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         saving={saving}
                         showToast={showToast}
                     />
+                ) : (
+                    <SecurityTab settings={settings} onPatch={patchSettings} saving={saving} />
                 )}
             </div>
 
-            {/* Toast */}
             {toast && (
                 <div
                     className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg text-sm font-medium shadow-dialog transition-all ${
@@ -279,145 +280,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
             )}
         </div>
-    );
-}
-
-// ── Security Tab ──────────────────────────────────────────────────────────────
-
-function SecurityTab({
-    settings,
-    onPatch,
-    saving,
-}: {
-    settings: Settings;
-    onPatch: (patch: Record<string, unknown>) => Promise<void>;
-    saving: boolean;
-}) {
-    const [newPw, setNewPw] = useState("");
-    const [confirmPw, setConfirmPw] = useState("");
-    const [pwError, setPwError] = useState<string | null>(null);
-
-    const [lockEnabled, setLockEnabled] = useState(settings.app_lock_enabled);
-    const [lockPw, setLockPw] = useState("");
-    const [clearLockPw, setClearLockPw] = useState(false);
-
-    useEffect(() => {
-        setLockEnabled(settings.app_lock_enabled);
-        setLockPw("");
-        setClearLockPw(false);
-    }, [settings.app_lock_enabled, settings.app_lock_has_password]);
-
-    const turningOn = lockEnabled && !settings.app_lock_enabled;
-    const turningOff = !lockEnabled && settings.app_lock_enabled;
-    const alreadyOn = lockEnabled && settings.app_lock_enabled;
-
-    // Save enabled only when there's a meaningful change:
-    // - Turning on: requires a password
-    // - Turning off: always ok
-    // - Already on: only if changing/removing password
-    const lockSaveEnabled =
-        (turningOn && lockPw.length > 0) ||
-        turningOff ||
-        (alreadyOn && (lockPw.length > 0 || clearLockPw));
-
-    const savePassword = async () => {
-        if (!newPw) return;
-        if (newPw !== confirmPw) { setPwError("Passwords don't match"); return; }
-        if (newPw.length < 4) { setPwError("Min 4 characters"); return; }
-        setPwError(null);
-        await onPatch({ admin_password: newPw });
-        setNewPw("");
-        setConfirmPw("");
-    };
-
-    const saveLock = async () => {
-        const patch: Record<string, unknown> = { app_lock_enabled: lockEnabled };
-        if (lockPw) patch.app_lock_password = lockPw;
-        if (clearLockPw) patch.clear_app_lock_password = true;
-        await onPatch(patch);
-        setLockPw("");
-        setClearLockPw(false);
-    };
-
-    const pwSaveEnabled = newPw.length >= 4 && confirmPw.length >= 4;
-
-    return (
-        <>
-            <Card title="Admin Password">
-                <div className="space-y-3">
-                    <input
-                        type="password"
-                        value={newPw}
-                        onChange={(e) => { setNewPw(e.target.value); setPwError(null); }}
-                        className="dialog-input"
-                        placeholder="New password"
-                    />
-                    <input
-                        type="password"
-                        value={confirmPw}
-                        onChange={(e) => { setConfirmPw(e.target.value); setPwError(null); }}
-                        className="dialog-input"
-                        placeholder="Confirm new password"
-                    />
-                    {pwError && <p className="text-nred text-xs">{pwError}</p>}
-                    <button
-                        onClick={savePassword}
-                        disabled={saving || !pwSaveEnabled}
-                        className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
-                    >
-                        {saving ? "Saving…" : "Change Password"}
-                    </button>
-                </div>
-            </Card>
-
-            <Card title="App Lock">
-                <FieldRow
-                    label="Lock the app"
-                    sub="Require a password before anyone can use Filim"
-                >
-                    <Toggle checked={lockEnabled} onChange={setLockEnabled} />
-                </FieldRow>
-
-                {lockEnabled && (
-                    <div className="space-y-3 pt-1">
-                        <input
-                            type="password"
-                            value={lockPw}
-                            onChange={(e) => { setLockPw(e.target.value); setClearLockPw(false); }}
-                            className="dialog-input"
-                            placeholder={
-                                turningOn
-                                    ? "Set a password to enable lock"
-                                    : "New lock password (leave blank to keep current)"
-                            }
-                            autoFocus={turningOn}
-                        />
-                        {alreadyOn && settings.app_lock_has_password && !lockPw && (
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={clearLockPw}
-                                    onChange={(e) => setClearLockPw(e.target.checked)}
-                                    className="accent-ncyan"
-                                />
-                                <span className="text-xs text-neutral-400">Remove password (unlock anyone)</span>
-                            </label>
-                        )}
-                        {turningOn && !lockPw && (
-                            <p className="text-xs text-neutral-500">A password is required to enable the lock.</p>
-                        )}
-                    </div>
-                )}
-
-                <button
-                    onClick={saveLock}
-                    disabled={saving || !lockSaveEnabled}
-                    className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
-                >
-                    {saving ? "Saving…" : "Save"}
-                </button>
-            </Card>
-        </>
     );
 }
 
@@ -440,6 +302,7 @@ function ProfilesTab({
 }) {
     const [allowCreating, setAllowCreating] = useState(settings.allow_creating_profiles);
     const [guestEnabled, setGuestEnabled] = useState(settings.guest_profile_enabled);
+    const [requirePins, setRequirePins] = useState(settings.require_profile_pins);
     const [limitProfiles, setLimitProfiles] = useState(settings.max_profiles !== null);
     const [maxProfiles, setMaxProfiles] = useState(settings.max_profiles ?? 5);
 
@@ -450,14 +313,23 @@ function ProfilesTab({
     useEffect(() => {
         setAllowCreating(settings.allow_creating_profiles);
         setGuestEnabled(settings.guest_profile_enabled);
+        setRequirePins(settings.require_profile_pins);
         setLimitProfiles(settings.max_profiles !== null);
         setMaxProfiles(settings.max_profiles ?? 5);
     }, [settings]);
+
+    const settingsChanged =
+        allowCreating !== settings.allow_creating_profiles ||
+        guestEnabled !== settings.guest_profile_enabled ||
+        requirePins !== settings.require_profile_pins ||
+        limitProfiles !== (settings.max_profiles !== null) ||
+        (limitProfiles && maxProfiles !== (settings.max_profiles ?? 5));
 
     const saveProfileSettings = async () => {
         const patch: Record<string, unknown> = {
             allow_creating_profiles: allowCreating,
             guest_profile_enabled: guestEnabled,
+            require_profile_pins: requirePins,
         };
         if (limitProfiles) {
             patch.max_profiles = maxProfiles;
@@ -500,7 +372,7 @@ function ProfilesTab({
 
     return (
         <>
-            <Card title="Profile Settings">
+            <Card title="Settings">
                 <FieldRow label="Allow creating profiles" sub="Users can create new profiles from the profiles page">
                     <Toggle checked={allowCreating} onChange={setAllowCreating} />
                 </FieldRow>
@@ -509,6 +381,12 @@ function ProfilesTab({
 
                 <FieldRow label="Guest profile" sub="Show the Guest profile on the profiles page">
                     <Toggle checked={guestEnabled} onChange={setGuestEnabled} />
+                </FieldRow>
+
+                <div className="border-t border-neutral-800" />
+
+                <FieldRow label="Require PINs" sub="All profiles must have a PIN to be created">
+                    <Toggle checked={requirePins} onChange={setRequirePins} />
                 </FieldRow>
 
                 <div className="border-t border-neutral-800" />
@@ -533,15 +411,14 @@ function ProfilesTab({
 
                 <button
                     onClick={saveProfileSettings}
-                    disabled={saving}
+                    disabled={saving || !settingsChanged}
                     className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
                 >
-                    {saving ? "Saving…" : "Save Settings"}
+                    {saving ? "Saving…" : "Save"}
                 </button>
             </Card>
 
             <Card title="Profiles">
-                {/* Create */}
                 <div className="flex gap-2">
                     <input
                         type="text"
@@ -561,7 +438,6 @@ function ProfilesTab({
                     </button>
                 </div>
 
-                {/* List */}
                 <div className="divide-y divide-neutral-800 -mx-6 px-6">
                     {profiles.length === 0 && (
                         <p className="text-neutral-600 text-sm py-2">No profiles yet.</p>
@@ -588,28 +464,89 @@ function ProfilesTab({
                                     </div>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => deleteProfile(p.id)}
-                                disabled={deletingId === p.id}
-                                className="text-neutral-600 hover:text-nred transition-colors disabled:opacity-40 p-1"
-                                aria-label={`Delete ${p.name}`}
-                            >
-                                {deletingId === p.id ? (
-                                    <span className="text-xs">…</span>
-                                ) : (
-                                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="3 6 5 6 21 6" />
-                                        <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                                        <path d="M10 11v6M14 11v6" />
-                                        <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                                    </svg>
-                                )}
-                            </button>
+                            {!p.is_guest ? (
+                                <button
+                                    onClick={() => deleteProfile(p.id)}
+                                    disabled={deletingId === p.id}
+                                    className="text-neutral-600 hover:text-nred transition-colors disabled:opacity-40 p-1"
+                                    aria-label={`Delete ${p.name}`}
+                                >
+                                    {deletingId === p.id ? (
+                                        <span className="text-xs">…</span>
+                                    ) : (
+                                        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                                            <path d="M10 11v6M14 11v6" />
+                                            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                                        </svg>
+                                    )}
+                                </button>
+                            ) : (
+                                <span className="text-xs text-neutral-700 pr-1">—</span>
+                            )}
                         </div>
                     ))}
                 </div>
             </Card>
         </>
+    );
+}
+
+// ── Security Tab ──────────────────────────────────────────────────────────────
+
+function SecurityTab({
+    settings: _settings,
+    onPatch,
+    saving,
+}: {
+    settings: Settings;
+    onPatch: (patch: Record<string, unknown>) => Promise<void>;
+    saving: boolean;
+}) {
+    const [newPw, setNewPw] = useState("");
+    const [confirmPw, setConfirmPw] = useState("");
+    const [pwError, setPwError] = useState<string | null>(null);
+
+    const savePassword = async () => {
+        if (!newPw) return;
+        if (newPw !== confirmPw) { setPwError("Passwords don't match"); return; }
+        if (newPw.length < 4) { setPwError("Min 4 characters"); return; }
+        setPwError(null);
+        await onPatch({ admin_password: newPw });
+        setNewPw("");
+        setConfirmPw("");
+    };
+
+    const pwSaveEnabled = newPw.length >= 4 && confirmPw.length >= 4;
+
+    return (
+        <Card title="Admin Password">
+            <div className="space-y-3">
+                <input
+                    type="password"
+                    value={newPw}
+                    onChange={(e) => { setNewPw(e.target.value); setPwError(null); }}
+                    className="dialog-input"
+                    placeholder="New password"
+                />
+                <input
+                    type="password"
+                    value={confirmPw}
+                    onChange={(e) => { setConfirmPw(e.target.value); setPwError(null); }}
+                    className="dialog-input"
+                    placeholder="Confirm new password"
+                />
+                {pwError && <p className="text-nred text-xs">{pwError}</p>}
+                <button
+                    onClick={savePassword}
+                    disabled={saving || !pwSaveEnabled}
+                    className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-40 transition-all"
+                >
+                    {saving ? "Saving…" : "Change Password"}
+                </button>
+            </div>
+        </Card>
     );
 }
 

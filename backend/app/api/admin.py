@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models import AppSettings, Profile
-from app.profiles.service import ProfileModel, ProfileService, _hash_pin
+from app.profiles.service import ProfileService
 
 router = APIRouter()
 
@@ -54,10 +54,6 @@ class LoginBody(BaseModel):
     password: str
 
 
-class VerifyLockBody(BaseModel):
-    password: str
-
-
 @router.post("/login")
 async def admin_login(
     body: LoginBody,
@@ -77,47 +73,29 @@ async def admin_login(
 async def get_public_settings(db: AsyncSession = Depends(get_db)) -> dict:
     s = await _get_settings(db)
     return {
-        "app_lock_enabled": s.app_lock_enabled,
         "allow_creating_profiles": s.allow_creating_profiles,
         "guest_profile_enabled": s.guest_profile_enabled,
         "max_profiles": s.max_profiles,
+        "require_profile_pins": s.require_profile_pins,
     }
-
-
-@router.post("/verify-lock")
-async def verify_lock(
-    body: VerifyLockBody,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    s = await _get_settings(db)
-    if not s.app_lock_enabled:
-        return {"valid": True}
-    if not s.app_lock_password_hash:
-        return {"valid": True}
-    if s.app_lock_password_hash != _sha256(body.password):
-        raise HTTPException(403, "Invalid password")
-    return {"valid": True}
 
 
 # ── Admin-only ────────────────────────────────────────────────────────────────
 
 class UpdateSettingsBody(BaseModel):
     admin_password: str | None = None
-    app_lock_enabled: bool | None = None
-    app_lock_password: str | None = None
-    clear_app_lock_password: bool | None = None
     allow_creating_profiles: bool | None = None
     guest_profile_enabled: bool | None = None
     max_profiles: int | None = None
     clear_max_profiles: bool | None = None
+    require_profile_pins: bool | None = None
 
 
 class AdminSettingsResponse(BaseModel):
-    app_lock_enabled: bool
-    app_lock_has_password: bool
     allow_creating_profiles: bool
     guest_profile_enabled: bool
     max_profiles: int | None
+    require_profile_pins: bool
 
 
 @router.get("/settings")
@@ -125,11 +103,10 @@ async def get_settings(
     s: AppSettings = Depends(require_admin),
 ) -> AdminSettingsResponse:
     return AdminSettingsResponse(
-        app_lock_enabled=s.app_lock_enabled,
-        app_lock_has_password=bool(s.app_lock_password_hash),
         allow_creating_profiles=s.allow_creating_profiles,
         guest_profile_enabled=s.guest_profile_enabled,
         max_profiles=s.max_profiles,
+        require_profile_pins=s.require_profile_pins,
     )
 
 
@@ -141,18 +118,8 @@ async def update_settings(
 ) -> dict:
     if body.admin_password is not None:
         s.admin_password_hash = _sha256(body.admin_password)
-        # Invalidate current session so caller must re-login
         s.admin_token = None
         s.admin_token_expires = None
-
-    if body.app_lock_enabled is not None:
-        s.app_lock_enabled = body.app_lock_enabled
-
-    if body.app_lock_password is not None:
-        s.app_lock_password_hash = _sha256(body.app_lock_password)
-
-    if body.clear_app_lock_password:
-        s.app_lock_password_hash = None
 
     if body.allow_creating_profiles is not None:
         s.allow_creating_profiles = body.allow_creating_profiles
@@ -164,6 +131,9 @@ async def update_settings(
         s.max_profiles = None
     elif body.max_profiles is not None:
         s.max_profiles = max(1, body.max_profiles)
+
+    if body.require_profile_pins is not None:
+        s.require_profile_pins = body.require_profile_pins
 
     await db.commit()
     password_changed = body.admin_password is not None

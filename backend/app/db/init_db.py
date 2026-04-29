@@ -164,6 +164,16 @@ async def _init_db(db_engine: AsyncEngine) -> None:
             db.add(guest_profile)
             await db.commit()
 
+        # Add require_profile_pins column if missing
+        try:
+            await db.execute(
+                text("ALTER TABLE app_settings ADD COLUMN require_profile_pins BOOLEAN DEFAULT 0 NOT NULL")
+            )
+            await db.commit()
+            logger.info("Migration: Added require_profile_pins column")
+        except Exception:
+            await db.rollback()
+
         # Initialize AppSettings singleton
         import hashlib
         app_settings = await db.get(AppSettings, "singleton")
@@ -172,9 +182,9 @@ async def _init_db(db_engine: AsyncEngine) -> None:
             app_settings = AppSettings(
                 id="singleton",
                 admin_password_hash=default_hash,
-                app_lock_enabled=False,
                 allow_creating_profiles=True,
                 guest_profile_enabled=True,
+                require_profile_pins=False,
             )
             db.add(app_settings)
             await db.commit()

@@ -4,7 +4,6 @@ import { ReactNode, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider, useIsFetching } from "@tanstack/react-query";
 import { ProfileProvider, useProfile } from "@/lib/profile-context";
 import { SplashLoader } from "./SplashLoader";
-import { AppLockGate } from "./AppLockGate";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -48,13 +47,11 @@ export function ClientProviders({ children }: { children: ReactNode }) {
 
     return (
         <QueryClientProvider client={queryClient}>
-            <AppLockGate>
-                <ProfileProvider>
-                    <SplashManager>
-                        {children}
-                    </SplashManager>
-                </ProfileProvider>
-            </AppLockGate>
+            <ProfileProvider>
+                <SplashManager>
+                    {children}
+                </SplashManager>
+            </ProfileProvider>
         </QueryClientProvider>
     );
 }
