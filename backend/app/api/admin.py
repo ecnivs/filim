@@ -39,8 +39,12 @@ async def require_admin(
     s = await _get_settings(db)
     if s.admin_token != token:
         raise HTTPException(401, "Invalid token")
-    if s.admin_token_expires and datetime.now(timezone.utc) > s.admin_token_expires:
-        raise HTTPException(401, "Token expired")
+    if s.admin_token_expires:
+        expires = s.admin_token_expires
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires:
+            raise HTTPException(401, "Token expired")
     return s
 
 

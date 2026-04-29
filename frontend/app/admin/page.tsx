@@ -252,11 +252,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <div className="max-w-xl mx-auto px-6 py-8 space-y-6">
                 {loadingSettings ? (
                     <div className="text-neutral-600 text-sm">Loading…</div>
+                ) : !settings ? (
+                    <div className="text-nred text-sm">Failed to load settings. <button onClick={() => { void fetchSettings(); void fetchProfiles(); }} className="underline">Retry</button></div>
                 ) : tab === "security" ? (
-                    <SecurityTab settings={settings!} onPatch={patchSettings} saving={saving} />
+                    <SecurityTab settings={settings} onPatch={patchSettings} saving={saving} />
                 ) : (
                     <ProfilesTab
-                        settings={settings!}
+                        settings={settings}
                         profiles={profiles}
                         onPatch={patchSettings}
                         onRefreshProfiles={fetchProfiles}
