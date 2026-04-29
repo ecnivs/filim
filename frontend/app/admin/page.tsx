@@ -217,6 +217,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         } catch {}
     };
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         void fetchSettings();
         void fetchProfiles();
@@ -499,7 +500,7 @@ function SettingsTab({
 
                 <Divider />
 
-                <FieldRow label="Simultaneous streams" sub="Max concurrent streams per profile (global default)">
+                <FieldRow label="Limit simultaneous streams" sub="Max concurrent streams per profile (global default)">
                     <Toggle checked={limitStreams} onChange={setLimitStreams} />
                 </FieldRow>
                 {limitStreams && (
@@ -671,19 +672,28 @@ function ProfilesTab({
     showToast: (msg: string, ok?: boolean) => void;
 }) {
     const [newName, setNewName] = useState("");
+    const [createPin, setCreatePin] = useState("");
     const [creating, setCreating] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
     const createProfile = async () => {
         if (!newName.trim() || creating) return;
+        if (settings.require_profile_pins && createPin.length !== 4) {
+            showToast("A 4-digit PIN is required", false);
+            return;
+        }
         setCreating(true);
         try {
             await adminFetch("/profiles", {
                 method: "POST",
-                body: JSON.stringify({ name: newName.trim() }),
+                body: JSON.stringify({
+                    name: newName.trim(),
+                    pin: createPin.trim() || null
+                }),
             });
             setNewName("");
+            setCreatePin("");
             await onRefreshProfiles();
             showToast("Profile created");
         } catch (e: any) {
@@ -728,22 +738,31 @@ function ProfilesTab({
             {/* Create profile */}
             <Card>
                 <SectionHeader title="New Profile" />
-                <div className="px-5 pb-5 flex gap-2">
+                <div className="px-5 pb-5 space-y-3">
                     <input
                         type="text"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && createProfile()}
-                        className="dialog-input flex-1"
+                        className="dialog-input"
                         placeholder="Profile name"
                         maxLength={30}
                     />
+                    <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={createPin}
+                        onChange={(e) => setCreatePin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        onKeyDown={(e) => e.key === "Enter" && createProfile()}
+                        className="dialog-input"
+                        placeholder={settings.require_profile_pins ? "PIN" : "PIN (optional)"}
+                    />
                     <button
                         onClick={createProfile}
-                        disabled={creating || !newName.trim()}
-                        className="px-4 py-2 rounded-lg bg-ncyan text-black text-sm font-bold hover:bg-ncyan/80 disabled:opacity-40 transition-all active:scale-95 shrink-0"
+                        disabled={creating || !newName.trim() || (settings.require_profile_pins && createPin.length !== 4)}
+                        className="w-full py-2.5 rounded-lg bg-ncyan text-black text-sm font-bold hover:bg-ncyan/80 disabled:opacity-40 transition-all active:scale-[0.98]"
                     >
-                        {creating ? "…" : "Create"}
+                        {creating ? "Creating…" : "Create Profile"}
                     </button>
                 </div>
             </Card>
@@ -828,7 +847,7 @@ function ProfilesTab({
                                     {/* Inline delete confirm */}
                                     {confirmDeleteId === p.id && (
                                         <div className="flex items-center justify-between px-5 py-2.5 bg-nred/5 border-t border-nred/10">
-                                            <p className="text-xs text-nred font-medium">Delete "{p.name}"?</p>
+                                            <p className="text-xs text-nred font-medium">Delete &quot;{p.name}&quot;?</p>
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => setConfirmDeleteId(null)}

@@ -182,6 +182,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         return () => {
             cancelled = true;
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [routeKey, routeIds, languageTrigger, qualityHint, selectedQualityId, setEpisodeData]);
 
     useEffect(() => {

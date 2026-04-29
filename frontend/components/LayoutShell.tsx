@@ -195,18 +195,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
                                             <ProfileDropdownItems currentId={profile?.id} />
                                         </div>
 
-                                        <div className="border-t border-neutral-800 my-1" />
 
-                                        <Link
-                                            href="/admin"
-                                            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
-                                        >
-                                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <circle cx="12" cy="12" r="3" />
-                                                <path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14" />
-                                            </svg>
-                                            Admin Panel
-                                        </Link>
 
                                         <div className="border-t border-neutral-800 my-1" />
 
@@ -273,11 +262,28 @@ const AVATAR_COLORS = [
 
 type ProfileEntry = { id: string; name: string; is_guest: boolean; is_locked: boolean };
 
+type PublicSettings = {
+    allow_creating_profiles: boolean;
+    guest_profile_enabled: boolean;
+    max_profiles: number | null;
+    require_profile_pins: boolean;
+};
+
 function ProfileDropdownItems({ currentId }: { currentId?: string }) {
     const { setProfile } = useProfile();
     const [unlocking, setUnlocking] = useState<ProfileEntry | null>(null);
+    const [settingPinProfile, setSettingPinProfile] = useState<ProfileEntry | null>(null);
     const [pin, setPin] = useState("");
     const [pinError, setPinError] = useState<string | null>(null);
+
+    const settingsQuery = useQuery({
+        queryKey: ["publicSettings"],
+        queryFn: async () => {
+            const res = await api.get<PublicSettings>("/admin/public");
+            return res.data;
+        }
+    });
+    const settings = settingsQuery.data;
 
     const { data: profiles } = useQuery({
         queryKey: ["profiles"],
@@ -302,9 +308,30 @@ function ProfileDropdownItems({ currentId }: { currentId?: string }) {
         },
     });
 
+    const setPinMutation = useMutation({
+        mutationFn: async (payload: { profile: ProfileEntry; pin: string }) => {
+            await api.patch(`/profiles/${payload.profile.id}`, { pin: payload.pin });
+        },
+        onSuccess: (_data, variables) => {
+            sessionStorage.setItem(`filim.pinVerified.${variables.profile.id}`, "1");
+            setProfile({ id: variables.profile.id, name: variables.profile.name, is_guest: variables.profile.is_guest });
+            window.location.href = "/";
+        },
+        onError: () => {
+            setPinError("Failed to set PIN.");
+            setPin("");
+        },
+    });
+
     const handleSwitch = (p: ProfileEntry) => {
         if (p.is_locked) {
             setUnlocking(p);
+            setPin("");
+            setPinError(null);
+            return;
+        }
+        if (settings?.require_profile_pins && !p.is_guest) {
+            setSettingPinProfile(p);
             setPin("");
             setPinError(null);
             return;
@@ -317,8 +344,12 @@ function ProfileDropdownItems({ currentId }: { currentId?: string }) {
         const next = val.replace(/\D/g, "").slice(0, 4);
         setPin(next);
         setPinError(null);
-        if (next.length === 4 && unlocking && !verifyPin.isPending) {
-            verifyPin.mutate({ profile: unlocking, pin: next });
+        if (next.length === 4) {
+            if (unlocking && !verifyPin.isPending) {
+                verifyPin.mutate({ profile: unlocking, pin: next });
+            } else if (settingPinProfile && !setPinMutation.isPending) {
+                setPinMutation.mutate({ profile: settingPinProfile, pin: next });
+            }
         }
     };
 
@@ -400,6 +431,68 @@ function ProfileDropdownItems({ currentId }: { currentId?: string }) {
                             <button
                                 type="button"
                                 onClick={() => { setUnlocking(null); setPin(""); setPinError(null); }}
+                                className="w-full py-2 text-sm text-neutral-500 hover:text-white transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {settingPinProfile && typeof document !== "undefined" && createPortal(
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={() => { setSettingPinProfile(null); setPin(""); setPinError(null); }}
+                >
+                    <div
+                        className="dialog-panel-shell w-full max-w-xs px-8 py-10 space-y-8"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="text-center space-y-3">
+                            <div className={`h-16 w-16 mx-auto rounded-md bg-gradient-to-br ${AVATAR_COLORS[(others.findIndex(p => p.id === settingPinProfile.id) + 1) % AVATAR_COLORS.length]} flex items-center justify-center text-2xl font-black text-white/90`}>
+                                {settingPinProfile.name.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-foreground">Set PIN</h2>
+                                <p className="text-xs text-neutral-400 mt-1">A PIN is required. Please set a 4-digit PIN.</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <input
+                                type="password"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                maxLength={4}
+                                value={pin}
+                                onChange={e => handlePinChange(e.target.value)}
+                                className="dialog-input-emphasis"
+                                autoFocus
+                                onKeyDown={e => {
+                                    if (e.key === "Enter" && pin.length >= 4 && !setPinMutation.isPending) {
+                                        setPinMutation.mutate({ profile: settingPinProfile, pin });
+                                    }
+                                }}
+                            />
+                            {pinError && (
+                                <p aria-live="polite" className="text-xs text-nred text-center font-medium">{pinError}</p>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <button
+                                type="button"
+                                disabled={setPinMutation.isPending || pin.length < 4}
+                                onClick={() => setPinMutation.mutate({ profile: settingPinProfile, pin })}
+                                className="w-full rounded bg-white py-2.5 text-sm font-bold text-black hover:bg-neutral-200 disabled:opacity-50 transition-all active:scale-95"
+                            >
+                                {setPinMutation.isPending ? "Setting…" : "Set PIN"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setSettingPinProfile(null); setPin(""); setPinError(null); }}
                                 className="w-full py-2 text-sm text-neutral-500 hover:text-white transition-colors"
                             >
                                 Cancel
