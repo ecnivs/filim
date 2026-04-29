@@ -302,7 +302,16 @@ export function Player({
                 setHlsQualityValue(auto ? "auto" : `lvl-${hls.currentLevel}`);
             };
 
-            hls.on(Hls.Events.ERROR, (_event, _data) => {
+            hls.on(Hls.Events.ERROR, (_event, data) => {
+                if (!data.fatal) return;
+                if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    hls.recoverMediaError();
+                } else {
+                    // Fatal network/other error — clear spinner so user isn't stuck.
+                    setIsBuffering(false);
+                    setIsPlayerReady(true);
+                    setIsPlaying(false);
+                }
             });
 
             hls.on(Hls.Events.MANIFEST_PARSED, (_event, _data) => {
@@ -502,6 +511,13 @@ export function Player({
             syncBufferingFromElement();
         };
 
+        // Clear the stuck spinner on native video load failure (e.g. 403, bad URL).
+        const handleVideoError = () => {
+            setIsBuffering(false);
+            setIsPlayerReady(true);
+            setIsPlaying(false);
+        };
+
         video.addEventListener("loadedmetadata", handleLoadedMetadata);
         video.addEventListener("timeupdate", handleTimeUpdate);
         video.addEventListener("playing", handlePlaying);
@@ -512,12 +528,25 @@ export function Player({
         video.addEventListener("canplay", handleCanPlay);
         video.addEventListener("canplaythrough", handleCanPlayThrough);
         video.addEventListener("seeked", handleSeeked);
+        video.addEventListener("error", handleVideoError);
 
         void video
             .play()
             .then(() => setIsPlaying(true))
             .catch(() => {
-                setIsPlaying(false);
+                // Gesture may have expired by the time the stream URL is fetched.
+                // Muted autoplay is permitted on iOS/Android — start muted so the
+                // video buffers and canplay fires, clearing the loading spinner.
+                video.muted = true;
+                setIsMuted(true);
+                void video
+                    .play()
+                    .then(() => setIsPlaying(true))
+                    .catch(() => {
+                        video.muted = false;
+                        setIsMuted(false);
+                        setIsPlaying(false);
+                    });
             });
 
         return () => {
@@ -531,6 +560,7 @@ export function Player({
             video.removeEventListener("canplay", handleCanPlay);
             video.removeEventListener("canplaythrough", handleCanPlayThrough);
             video.removeEventListener("seeked", handleSeeked);
+            video.removeEventListener("error", handleVideoError);
             if (hlsRef.current) {
                 hlsRef.current.destroy();
                 hlsRef.current = null;
@@ -1255,6 +1285,7 @@ export function Player({
                     ref={videoRef}
                     className="pointer-events-none h-full w-full bg-black object-contain"
                     playsInline
+                    preload="auto"
                     controls={false}
                 />
 

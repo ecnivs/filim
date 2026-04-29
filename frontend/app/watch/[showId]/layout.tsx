@@ -39,6 +39,9 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     const [language, setLanguage] = useState<string>("ja");
     const languageRef = useRef(language);
     languageRef.current = language;
+    // Incremented only on user-initiated language changes; avoids re-triggering fetchStream
+    // when fetchStream itself calls setLanguage after reading the audio preference.
+    const [languageTrigger, setLanguageTrigger] = useState(0);
     const [selectedQualityId, setSelectedQualityId] = useState<string | null>(null);
     const [showDetails, setShowDetails] = useState<WatchShowDetails | null>(null);
     const [seasons, setSeasons] = useState<{ id: string; title: string }[]>([]);
@@ -120,7 +123,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                     resumePosition = mergeResumeFromSessionAndApi(fromSession, fromApi);
                 }
 
-                let streamLanguage = language;
+                let streamLanguage = languageRef.current;
                 if (applyServerResume) {
                     try {
                         const prefRes = await api.get<{ item: { audio_language_id: string } | null }>(
@@ -179,7 +182,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, [routeKey, routeIds, language, qualityHint, selectedQualityId, setEpisodeData]);
+    }, [routeKey, routeIds, languageTrigger, qualityHint, selectedQualityId, setEpisodeData]);
 
     useEffect(() => {
         let cancelled = false;
@@ -217,22 +220,6 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         return () => { cancelled = true; };
     }, [routeIds?.showId]);
 
-    useEffect(() => {
-        async function fetchAudioPreference() {
-            try {
-                const res = await api.get<{ item: { audio_language_id: string } | null }>(
-                    "/user/audio-preference"
-                );
-                const pref = res.data.item?.audio_language_id;
-                if (!pref) return;
-                if (pref === "ja" || pref === "en") setLanguage(pref);
-                else if (pref === "sub") setLanguage("ja");
-                else if (pref === "dub") setLanguage("en");
-            } catch { /* ignore */ }
-        }
-        void fetchAudioPreference();
-    }, []);
-
     const episodeMeta = useMemo(() => {
         if (!showDetails || !routeIds) return null;
         return showDetails.episodes.find((ep) => {
@@ -267,6 +254,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
 
     const handleChangeLanguage = useCallback((nextId: string) => {
         setLanguage(nextId);
+        setLanguageTrigger(t => t + 1);
         api.post("/user/audio-preference", { audio_language_id: nextId }).catch(() => { });
     }, []);
 
