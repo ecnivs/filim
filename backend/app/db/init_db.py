@@ -140,17 +140,21 @@ async def _init_db(db_engine: AsyncEngine) -> None:
 
     async_session = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as db:
-        try:
-            await db.execute(
-                text(
-                    "ALTER TABLE profiles ADD COLUMN is_guest BOOLEAN DEFAULT 0 NOT NULL"
-                )
-            )
-            await db.commit()
-            print("Migration: Added is_guest column to profiles table")
-        except Exception:
-            await db.rollback()
+        # ── Column migrations (all before any ORM queries) ──────────────────
+        _column_migrations = [
+            ("profiles", "ALTER TABLE profiles ADD COLUMN is_guest BOOLEAN DEFAULT 0 NOT NULL"),
+            ("profiles", "ALTER TABLE profiles ADD COLUMN max_concurrent_streams INTEGER"),
+            ("app_settings", "ALTER TABLE app_settings ADD COLUMN require_profile_pins BOOLEAN DEFAULT 0 NOT NULL"),
+            ("app_settings", "ALTER TABLE app_settings ADD COLUMN max_concurrent_streams INTEGER"),
+        ]
+        for table, sql in _column_migrations:
+            try:
+                await db.execute(text(sql))
+                await db.commit()
+            except Exception:
+                await db.rollback()
 
+        # ── Seed data ───────────────────────────────────────────────────────
         stmt = select(Profile).where(Profile.is_guest.is_(True))
         result = await db.execute(stmt)
         guest = result.scalar_one_or_none()
@@ -163,36 +167,6 @@ async def _init_db(db_engine: AsyncEngine) -> None:
             )
             db.add(guest_profile)
             await db.commit()
-
-        # Add require_profile_pins column if missing
-        try:
-            await db.execute(
-                text("ALTER TABLE app_settings ADD COLUMN require_profile_pins BOOLEAN DEFAULT 0 NOT NULL")
-            )
-            await db.commit()
-            logger.info("Migration: Added require_profile_pins column")
-        except Exception:
-            await db.rollback()
-
-        # Add max_concurrent_streams to app_settings if missing
-        try:
-            await db.execute(
-                text("ALTER TABLE app_settings ADD COLUMN max_concurrent_streams INTEGER")
-            )
-            await db.commit()
-            logger.info("Migration: Added max_concurrent_streams to app_settings")
-        except Exception:
-            await db.rollback()
-
-        # Add max_concurrent_streams to profiles if missing
-        try:
-            await db.execute(
-                text("ALTER TABLE profiles ADD COLUMN max_concurrent_streams INTEGER")
-            )
-            await db.commit()
-            logger.info("Migration: Added max_concurrent_streams to profiles")
-        except Exception:
-            await db.rollback()
 
         # Initialize AppSettings singleton
         import hashlib
