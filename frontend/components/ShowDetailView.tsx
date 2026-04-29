@@ -346,6 +346,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                         alt={data.title}
                         fill
                         priority
+                        unoptimized
                         sizes="100vw"
                         className="object-cover"
                     />
@@ -516,6 +517,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                                 src={data.cover_image_url}
                                                 alt={ep.title || `Episode ${ep.number}`}
                                                 fill
+                                                unoptimized
                                                 sizes="192px"
                                                 className="object-cover opacity-60"
                                             />

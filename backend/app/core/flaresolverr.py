@@ -8,7 +8,9 @@ from typing import Any
 
 import httpx
 
-FLARESOLVERR_URL = "http://localhost:8191/v1"
+from app.core.config import settings
+
+FLARESOLVERR_URL = settings.flaresolverr_url
 _TIMEOUT = 90.0
 
 # Persistent browser session — CF challenge solved once, reused across requests.

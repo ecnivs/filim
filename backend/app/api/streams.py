@@ -1,9 +1,9 @@
 from typing import Optional
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from app.core.config import settings
 from app.core.constants import DEFAULT_USER_AGENT
@@ -59,6 +59,36 @@ def _resolve_language_and_mode(
 
     effective_mode = "dub" if resolved_language == "en" else "sub"
     return resolved_language, effective_mode
+
+
+_ALLOWED_IMAGE_HOSTS = {"api.allanime.day", "wp.allanime.day"}
+
+
+@router.get("/image")
+async def proxy_image(url: str = Query(...)) -> Response:
+    """Proxy allanime image assets that are Cloudflare-blocked for direct browser access."""
+    target_url = unquote(url)
+    parsed = urlparse(target_url)
+    if parsed.hostname not in _ALLOWED_IMAGE_HOSTS:
+        raise HTTPException(status_code=400, detail="Disallowed image host")
+
+    try:
+        resp = await _proxy_client.get(target_url, headers=_PROXY_HEADERS)
+        if resp.status_code == 403:
+            # Some CDN paths don't enforce hotlink protection — retry without Referer.
+            minimal = {"User-Agent": _PROXY_HEADERS["User-Agent"]}
+            resp = await _proxy_client.get(target_url, headers=minimal)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=404, detail="Image not found upstream")
+        return Response(
+            content=resp.content,
+            media_type=resp.headers.get("content-type", "image/jpeg"),
+            headers={"cache-control": "public, max-age=86400"},
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Image proxy error: {exc}") from exc
 
 
 @router.get("/proxy")

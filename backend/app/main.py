@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.logger import setup_logging
 
@@ -50,6 +51,8 @@ def create_app() -> FastAPI:
             f"Time: {process_time:.2f}ms"
         )
         return response
+
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
     app.add_middleware(
         CORSMiddleware,

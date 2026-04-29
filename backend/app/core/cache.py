@@ -14,7 +14,7 @@ T = TypeVar("T")
 
 def cache_response(
     ttl_seconds: int = 300,
-    key_prefix: str = "filim:cache:",
+    key_prefix: str = "filim:cache:v2:",
     response_model: Optional[Type[BaseModel]] = None,
 ):
     """Decorator to cache function results with Pydantic model awareness."""

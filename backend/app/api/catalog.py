@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import CatalogService
+from app.core.utils import proxy_img_url as _proxy_img
 from app.db.session import get_db
 from app.sources import EpisodeSummaryModel
 
@@ -26,8 +27,8 @@ class ShowSummaryResponse(BaseModel):
                 id=src.get("id"),
                 title=src.get("title", ""),
                 episode_count=src.get("episode_count", 0),
-                poster_image_url=src.get("poster_image_url"),
-                banner_image_url=src.get("banner_image_url"),
+                poster_image_url=_proxy_img(src.get("poster_image_url")),
+                banner_image_url=_proxy_img(src.get("banner_image_url")),
                 synopsis=src.get("synopsis"),
                 tags=src.get("tags", []),
                 available_audio_languages=src.get("available_audio_languages", []),
@@ -37,8 +38,8 @@ class ShowSummaryResponse(BaseModel):
             id=src.id,
             title=src.title,
             episode_count=src.episode_count,
-            poster_image_url=src.poster_image_url,
-            banner_image_url=src.banner_image_url,
+            poster_image_url=_proxy_img(src.poster_image_url),
+            banner_image_url=_proxy_img(src.banner_image_url),
             synopsis=src.synopsis,
             tags=src.tags,
             available_audio_languages=src.available_audio_languages,
@@ -155,7 +156,7 @@ async def get_show_details(
         episodes=[EpisodeSummaryResponse.from_source(e) for e in episodes],
         synopsis=details.synopsis,
         tags=details.tags,
-        cover_image_url=details.banner_image_url or details.poster_image_url,
+        cover_image_url=_proxy_img(details.banner_image_url or details.poster_image_url),
         status=None,
         available_audio_languages=details.available_audio_languages,
     )

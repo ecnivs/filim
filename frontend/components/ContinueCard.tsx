@@ -57,6 +57,7 @@ export function ContinueCard({
                             src={coverImageUrl}
                             alt={title}
                             fill
+                            unoptimized
                             sizes="(max-width: 1024px) 23vw, 15vw"
                             className="object-cover"
                             onError={() => setImageFailed(true)}

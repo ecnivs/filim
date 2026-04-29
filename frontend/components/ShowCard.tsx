@@ -86,6 +86,7 @@ export function ShowCard({
                         src={show.poster_image_url}
                         alt={show.title}
                         fill
+                        unoptimized
                         sizes="(max-width: 640px) 31vw, (max-width: 1024px) 23vw, 15vw"
                         className="object-cover"
                         onError={() => setImageFailed(true)}

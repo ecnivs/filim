@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.utils import proxy_img_url as _proxy_img
 from app.db.session import get_db
 from app.sessions import SessionService, WatchProgressModel
 
@@ -81,7 +82,7 @@ async def continue_watching(
                 duration_seconds=row.duration_seconds,
                 progress=progress,
                 show_title=row.show_title,
-                cover_image_url=row.cover_image_url,
+                cover_image_url=_proxy_img(row.cover_image_url),
             )
         )
     return {"items": items}
@@ -116,7 +117,7 @@ async def get_show_progress(
                 duration_seconds=row.duration_seconds,
                 progress=progress,
                 show_title=row.show_title,
-                cover_image_url=row.cover_image_url,
+                cover_image_url=_proxy_img(row.cover_image_url),
             )
         )
     return {"items": items}

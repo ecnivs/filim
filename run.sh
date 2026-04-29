@@ -28,7 +28,7 @@ echo "Starting backend and frontend..."
 (cd backend && uvicorn app.main:app --workers 4 --host 0.0.0.0 --port 8000) &
 PIDS+=($!)
 
-(cd frontend && npm run dev) &
+(cd frontend && npm run build && npm run start) &
 PIDS+=($!)
 
 wait "${PIDS[@]}"

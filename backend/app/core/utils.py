@@ -1,6 +1,19 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import quote, urlparse
+
+_ALLANIME_IMAGE_HOSTS = frozenset({"api.allanime.day", "wp.allanime.day"})
+
+
+def proxy_img_url(url: str | None) -> str | None:
+    """Rewrite allanime image URLs to go through the backend proxy."""
+    if not url:
+        return url
+    host = urlparse(url).hostname or ""
+    if host in _ALLANIME_IMAGE_HOSTS:
+        return f"/api/v1/stream/image?url={quote(url, safe='')}"
+    return url
 
 TITLE_CLEANUP_REGEXES = [
     (re.compile(r"\s*\(.*?\)\s*"), " "),
