@@ -1,5 +1,5 @@
 from typing import Optional
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -109,7 +109,6 @@ async def proxy_stream(request: Request, url: str = Query(...)) -> StreamingResp
 
 @router.get("/{show_id}/episodes/{episode}/stream")
 async def get_episode_stream(
-    request: Request,
     show_id: str,
     episode: str,
     mode: str = Query("sub", pattern="^(sub|dub)$"),
@@ -148,9 +147,7 @@ async def get_episode_stream(
     # Route them through the backend proxy so Referer/UA are injected server-side.
     is_hls = ".m3u8" in manifest_url
     if not is_hls:
-        from urllib.parse import quote
-        base = str(request.base_url).rstrip("/")
-        manifest_url = f"{base}/api/v1/stream/proxy?url={quote(manifest_url, safe='')}"
+        manifest_url = f"/api/v1/stream/proxy?url={quote(manifest_url, safe='')}"
 
     if resolved_language == "en":
         audio_label = "English"

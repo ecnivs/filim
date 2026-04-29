@@ -545,7 +545,8 @@ export function Player({
                     .catch(() => {
                         video.muted = false;
                         setIsMuted(false);
-                        setIsPlaying(false);
+                        // Don't setIsPlaying(false) here — races with handlePlaying
+                        // when user triggers play while this promise is pending.
                     });
             });
 
