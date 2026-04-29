@@ -1,4 +1,4 @@
-name: Deploy to filim.ecnivs.com
+name: Deploy
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
 
 jobs:
   deploy:
-    name: Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -18,9 +17,6 @@ jobs:
           host: 82.25.105.110
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          known_hosts: |
-            |1|GfRb7OA7hgfKKOrrHDzqoGxYSCY=|+qDNpPRYPclcEVDovKz4YTzH6bs= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC3mci9LN5PgnhKwGqlRWqp832IXnsL6MwdOghoX4xkwW8BErTQ5cNSbnfmxVtleKud/AYhKz0gMbIZKXbQ7kwzgg1gvEhWiL0kO26ONaxOG10ju0Gm94jFNGU9gh2wcL4KdlF3/MziCmQVPQwspe7BZr3rtbzmWhynSU3TVVeSyFKH2uRcL6dBECXylc3wuDgllp4GmlZq47XiYH/gtLsNKNbxGgNZxHtVjuRW59UYmjtcBuL0O2YQ5o9PajPn+VmykDZ+2B02QBtV+0BJECwddFFcSlFsGWF9sRQgHFHfJviFw+9oSFC8cHImrUJZfEWGfQ+7cGoy1cqxZ548KUXDBCxfseAXeSIvsX9gv3+uDgfqXgrE3MZ1130rszSAwdUb5QGlqlj79DH03geh0By02JIQPsjHqlpJR2U5VcN/AOg7LTkkMBErr5W+DNbRhNFuiYvOFxkjy2jN4KFKwkUYYuirIkwwaXxkXQdr0VQbfb/Rj12sOi7r2ITaZSV40LM=
-            |1|yxTSigzg+x7/zcqzSPH3GoQx3KM=|A2DM5VQRJChn8+8FUjJQ01pYi6g= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBLMvdBJvT+e1qzm4C3MymG9Fwu3aM5aJ00145ZuZ3MgUCX+RvH2lnJTN1ennDuGS52hdCkRHu4JHkfOTDKgG1B8=
-            |1|ydXm6VWtTaRxuWHdDohSH9PzjCQ=|FBnSzhd60AD5VpmVfsLxMGwCNmQ= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEnVu1659oHrjpww3K2NyEmtYDuKkrJpIygkURFKTeZ8
+          fingerprint: SHA256:LQi71ONIKe1Sbp6tNIHdUdmIQLPS3Bn0+1oQWo2jeEk
           script: bash /opt/sites/filim/deploy.sh
           command_timeout: 12m
