@@ -17,6 +17,6 @@ jobs:
           host: 82.25.105.110
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          fingerprint: SHA256:LQi71ONIKe1Sbp6tNIHdUdmIQLPS3Bn0+1oQWo2jeEk
+          fingerprint: 5d:38:4c:67:77:e8:76:8b:ff:b6:94:3a:a8:de:19:01
           script: bash /opt/sites/filim/deploy.sh
           command_timeout: 12m
