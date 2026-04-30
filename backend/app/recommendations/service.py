@@ -326,6 +326,32 @@ class RecommendationService:
         end = min(cursor + batch_size, len(genres))
         batch = genres[cursor:end]
 
+        # DB-first: check which genres have enough local data.
+        db_results: dict[str, list[ShowSummaryModel]] = {}
+        needs_upstream: list[str] = []
+        for genre in batch:
+            items = await self._genre_shows_from_db(genre, 20, set())
+            if len(items) >= 10:
+                db_results[genre] = items
+            else:
+                needs_upstream.append(genre)
+
+        # Fetch upstream for remaining genres in parallel (preserves old perf).
+        upstream_fetches = await asyncio.gather(
+            *[self.catalog.search(query="", genres=[g], page=1) for g in needs_upstream],
+            return_exceptions=True,
+        )
+        upstream_results: dict[str, list[ShowSummaryModel]] = {}
+        for genre, result in zip(needs_upstream, upstream_fetches):
+            if isinstance(result, Exception) or not result:
+                upstream_results[genre] = []
+            else:
+                genre_lower = genre.lower()
+                upstream_results[genre] = [
+                    r for r in result
+                    if genre_lower in [t.lower() for t in (r.tags or [])]
+                ]
+
         sections: list[RecommendationSectionModel] = []
         seen_ids: set[str] = set()
 
@@ -333,25 +359,14 @@ class RecommendationService:
             if len(sections) >= limit:
                 break
 
-            final_items = await self._genre_shows_from_db(genre, 20, seen_ids)
-
-            if len(final_items) < 10:
-                # DB doesn't have enough — fall back to upstream.
-                try:
-                    upstream = await self.catalog.search(query="", genres=[genre], page=1)
-                except Exception:
-                    upstream = []
-                genre_lower = genre.lower()
-                upstream_items: list[ShowSummaryModel] = []
-                for r in upstream:
-                    if r.id in seen_ids:
-                        continue
-                    if genre_lower not in [t.lower() for t in (r.tags or [])]:
-                        continue
-                    upstream_items.append(r)
-                    if len(upstream_items) >= 20:
-                        break
-                final_items = upstream_items
+            if genre in db_results:
+                # Re-run with seen_ids now populated for proper dedup.
+                final_items = await self._genre_shows_from_db(genre, 20, seen_ids)
+            else:
+                final_items = [
+                    r for r in upstream_results.get(genre, [])
+                    if r.id not in seen_ids
+                ][:20]
 
             for item in final_items:
                 seen_ids.add(item.id)
