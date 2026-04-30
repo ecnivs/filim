@@ -115,9 +115,19 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
             if (id) seen.add(id);
             const out: ShowSummaryCard[] = [];
 
-            const pushBatch = (items: ShowSummaryCard[]) => {
+            const normalizedGenres = genreTags.map((g) => g.trim().toLowerCase());
+
+            const hasRequiredGenre = (item: ShowSummaryCard) => {
+                if (!item.tags || item.tags.length === 0) return false;
+                return item.tags.some((t) =>
+                    normalizedGenres.includes(t.trim().toLowerCase())
+                );
+            };
+
+            const pushBatch = (items: ShowSummaryCard[], requireGenre = false) => {
                 for (const item of items) {
                     if (!item.id || seen.has(item.id)) continue;
+                    if (requireGenre && !hasRequiredGenre(item)) continue;
                     seen.add(item.id);
                     out.push(item);
                     if (out.length >= 18) return;
@@ -136,7 +146,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                         }
                     }
                 );
-                pushBatch(combined.data.items);
+                pushBatch(combined.data.items, true);
             } catch {
                 /* ignore */
             }
@@ -155,7 +165,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                             }
                         }
                     );
-                    pushBatch(res.data.items);
+                    pushBatch(res.data.items, true);
                 } catch {
                     /* ignore */
                 }
@@ -170,7 +180,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                             params: { q: tag, mode: "sub", page: 1 }
                         }
                     );
-                    pushBatch(res.data.items);
+                    pushBatch(res.data.items, true);
                 } catch {
                     /* ignore */
                 }
@@ -238,7 +248,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
     });
 
     const continueWatching = useQuery({
-        queryKey: ["continue-watching"],
+        queryKey: ["continue-watching", profile?.id],
         enabled: !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ items: { show_id: string; episode: string }[] }>("/user/continue-watching");
@@ -436,7 +446,7 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                         <div className="space-y-1">
                             <span className="text-xs text-neutral-500 font-bold">Genres:</span>
                             <div className="flex flex-wrap gap-2">
-                                {data.tags?.map(tag => (
+                                {genreTags.map(tag => (
                                     <Link
                                         key={tag}
                                         href={`/?genres=${encodeURIComponent(tag)}`}

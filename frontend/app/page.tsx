@@ -8,7 +8,7 @@ import { ShowCard, type ShowSummaryCard as ShowSummary } from "@/components/Show
 import { SectionRow } from "@/components/SectionRow";
 import { useSearchParams } from "next/navigation";
 import { ContinueCard } from "@/components/ContinueCard";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import { usePreferences } from "@/hooks/usePreferences";
 import { useProfile } from "@/lib/profile-context";
@@ -37,11 +37,25 @@ type DiscoveryPage = {
 import { GridView } from "@/components/GridView";
 import { FilimLoadingSurface } from "@/components/FilimLoadingSurface";
 
+function genreKey(title: string): string {
+    return title
+        .toLowerCase()
+        .replace(/^(top|best|popular|trending|new|classic|must.watch|hidden|great|all|more)\s+/g, "")
+        .replace(/\s+(shows?|anime|series|titles?|picks?|finds?|content|films?)$/g, "")
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .join(" ");
+}
+
 export default function HomePage() {
     const { profile, isReady } = useProfile();
     const searchParams = useSearchParams();
     const urlQuery = searchParams.get("q") || "";
     const urlGenres = searchParams.get("genres") || "";
+
+    const [billboardImageReady, setBillboardImageReady] = useState(false);
+    const prevFeaturedIdRef = useRef<string | undefined>();
 
     const continueWatching = useQuery({
         queryKey: ["continue-watching", profile?.id],
@@ -57,6 +71,10 @@ export default function HomePage() {
 
     const recommendations = useQuery({
         queryKey: ["recommendations", profile?.id],
+        enabled: isReady,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
+        refetchOnWindowFocus: false,
         queryFn: async () => {
             const res = await api.get<{ sections: RecommendationSection[] }>(
                 "/user/recommendations"
@@ -67,71 +85,112 @@ export default function HomePage() {
 
     const discovery = useInfiniteQuery({
         queryKey: ["discovery", profile?.id],
+        enabled: isReady,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
+        refetchOnWindowFocus: false,
+        maxPages: 50,
         queryFn: async ({ pageParam = 0 }) => {
             const res = await api.get<DiscoveryPage>(
                 "/user/recommendations/discovery",
-                { params: { cursor: pageParam, limit: 3 } }
+                { params: { cursor: pageParam, limit: 5 } }
             );
             return res.data;
         },
-        getNextPageParam: (lastPage, allPages) => {
-            if (allPages.length >= 50) return undefined;
-            if (lastPage.next_cursor == null) return undefined;
-            return lastPage.next_cursor;
-        },
+        getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
         initialPageParam: 0,
     });
 
-    const discoverySections = useMemo(() => {
-        const flat = discovery.data?.pages.flatMap((p) => p.sections) ?? [];
-        const seenSections = new Set<string>();
+    // Recs: stable, item-dedup only. Separate memo so discovery page loads don't recompute this.
+    const deduplicatedRecommendations = useMemo(() => {
         const seenItems = new Set<string>();
-        return flat
-            .filter((s) => {
-                const k = s.title.trim().toLowerCase();
-                if (seenSections.has(k)) return false;
-                seenSections.add(k);
-                return true;
-            })
-            .map((s) => ({
-                ...s,
-                items: s.items.filter((item) => {
+        return (recommendations.data ?? [])
+            .map((s): RecommendationSection | null => {
+                const items = s.items.filter((item) => {
                     if (seenItems.has(item.id)) return false;
                     seenItems.add(item.id);
                     return true;
-                }),
-            }))
-            .filter((s) => s.items.length > 0);
+                });
+                return items.length > 0 ? { ...s, items } : null;
+            })
+            .filter((s): s is RecommendationSection => s !== null);
+    }, [recommendations.data]);
+
+    // Discovery: incremental accumulation — only process new pages, never recompute old ones.
+    // This prevents existing carousels from blinking or re-rendering when a new page loads.
+    const [discoverySections, setDiscoverySections] = useState<RecommendationSection[]>([]);
+    const discoveryDedupeRef = useRef({
+        seenItems: new Set<string>(),
+        seenGenreKeys: new Set<string>(),
+        seenSectionIds: new Set<string>(),
+        processedPageCount: 0,
+    });
+
+    // When recs load/change, seed the discovery dedup state and reset accumulated sections.
+    useEffect(() => {
+        const state = discoveryDedupeRef.current;
+        state.seenItems = new Set(
+            (recommendations.data ?? []).flatMap((s) => s.items.map((i) => i.id))
+        );
+        state.seenGenreKeys = new Set(
+            (recommendations.data ?? []).map((s) => genreKey(s.title))
+        );
+        state.seenSectionIds = new Set();
+        state.processedPageCount = 0;
+        setDiscoverySections([]);
+    }, [recommendations.data]);
+
+    // Append only new pages — never touch already-rendered sections.
+    useEffect(() => {
+        const pages = discovery.data?.pages ?? [];
+        const state = discoveryDedupeRef.current;
+        const newPages = pages.slice(state.processedPageCount);
+        if (newPages.length === 0) return;
+
+        const newSections: RecommendationSection[] = [];
+        for (const page of newPages) {
+            for (const s of page.sections) {
+                if (state.seenSectionIds.has(s.id)) continue;
+                state.seenSectionIds.add(s.id);
+                const gk = genreKey(s.title);
+                if (state.seenGenreKeys.has(gk)) continue;
+                state.seenGenreKeys.add(gk);
+                const items = s.items.filter((item) => {
+                    if (state.seenItems.has(item.id)) return false;
+                    state.seenItems.add(item.id);
+                    return true;
+                });
+                if (items.length > 0) newSections.push({ ...s, items });
+            }
+        }
+        state.processedPageCount = pages.length;
+        if (newSections.length > 0) {
+            setDiscoverySections((prev) => [...prev, ...newSections]);
+        }
     }, [discovery.data?.pages]);
 
     const { ref, inView } = useInView({
         threshold: 0,
-        rootMargin: "400px",
+        rootMargin: "700px",
     });
 
+    const { fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: discoveryLoading, data: discoveryData } = discovery;
+
     useEffect(() => {
-        if (
-            !inView ||
-            !discovery.data ||
-            discovery.isLoading ||
-            !discovery.hasNextPage ||
-            discovery.isFetchingNextPage
-        ) {
-            return;
-        }
-        void discovery.fetchNextPage();
-    }, [inView, discovery]);
+        if (!inView || !discoveryData || discoveryLoading || !hasNextPage || isFetchingNextPage) return;
+        void fetchNextPage();
+    }, [inView, discoveryData, discoveryLoading, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
     const searchResults = useInfiniteQuery({
         queryKey: ["search", urlQuery, urlGenres],
         enabled: urlQuery.length > 0 || urlGenres.length > 0,
         queryFn: async ({ pageParam = 1 }) => {
             const res = await api.get<{ items: ShowSummary[] }>("/catalog/search", {
-                params: { 
-                    q: urlQuery, 
+                params: {
+                    q: urlQuery,
                     genres: urlGenres,
-                    mode: "sub", 
-                    page: pageParam 
+                    mode: "sub",
+                    page: pageParam
                 }
             });
             return res.data;
@@ -145,28 +204,35 @@ export default function HomePage() {
 
     const { handleToggleList, isInList } = usePreferences();
 
+    const lockedFeaturedShowRef = useRef<ShowSummary | undefined>();
+    useEffect(() => { lockedFeaturedShowRef.current = undefined; }, [profile?.id]);
     const featuredShow = useMemo(() => {
+        // Once locked in, never change — prevents billboard from blinking on discovery page loads.
+        if (lockedFeaturedShowRef.current) return lockedFeaturedShowRef.current;
+        // Prefer recs; discovery items are intentionally excluded to avoid dep on discoverySections.
+        const items = recommendations.data?.flatMap((s) => s.items) ?? [];
+        if (items.length === 0) return undefined;
         const inProgressIds = new Set(continueWatching.data?.map((i) => i.show_id) ?? []);
-
-        // Primary pool: profile-specific recommendations. Fallback: discovery sections.
-        const recItems = recommendations.data?.flatMap((s) => s.items) ?? [];
-        const discoveryItems = discoverySections.flatMap((s) => s.items);
-        const allItems = recItems.length > 0 ? recItems : discoveryItems;
-
-        const candidates = allItems.filter((a) => !inProgressIds.has(a.id));
+        const candidates = items.filter((a) => !inProgressIds.has(a.id));
         if (candidates.length === 0) return undefined;
-
         const withBanners = candidates.filter((a) => a.banner_image_url?.startsWith("http"));
         const withPosters = candidates.filter((a) => a.poster_image_url?.startsWith("http"));
         const pool = withBanners.length > 0 ? withBanners : withPosters.length > 0 ? withPosters : candidates;
-
-        // Rotate daily, vary by profile — stable within a session.
         const dayIndex = Math.floor(Date.now() / 86_400_000);
         const profileSeed = profile?.id
             ? profile.id.charCodeAt(0) + profile.id.charCodeAt(profile.id.length - 1)
             : 0;
-        return pool[(dayIndex + profileSeed) % Math.min(pool.length, 5)];
-    }, [recommendations.data, discoverySections, continueWatching.data, profile?.id]);
+        const result = pool[(dayIndex + profileSeed) % Math.min(pool.length, 5)];
+        lockedFeaturedShowRef.current = result;
+        return result;
+    }, [recommendations.data, continueWatching.data, profile?.id]);
+
+    useEffect(() => {
+        if (featuredShow?.id !== prevFeaturedIdRef.current) {
+            prevFeaturedIdRef.current = featuredShow?.id;
+            setBillboardImageReady(false);
+        }
+    }, [featuredShow?.id]);
 
     const billboardResumeHref = (() => {
         if (!featuredShow) return "#";
@@ -174,10 +240,13 @@ export default function HomePage() {
         if (progress && progress.episode) {
             return `/watch/${featuredShow.id}/${progress.episode}`;
         }
-        return `/watch/${featuredShow.id}/1`;
+        return `/show/${featuredShow.id}`;
     })();
 
     const isInitialLoading = recommendations.isLoading;
+    const hasImageToLoad = !!featuredShow && !!(featuredShow.banner_image_url || featuredShow.poster_image_url);
+    const billboardReady = billboardImageReady || !hasImageToLoad;
+    const showSplash = isInitialLoading || (hasImageToLoad && !billboardImageReady);
 
     return (
         <div className="min-h-screen">
@@ -189,30 +258,11 @@ export default function HomePage() {
                 />
             ) : (
                 <>
-                    <FilimLoadingSurface show={isInitialLoading} className="z-[90]" />
-                    {(isInitialLoading || (discovery.isLoading && !featuredShow)) ? (
-                        <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[320px] md:min-h-[500px] overflow-hidden bg-neutral-900">
-                            <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-800" />
-                            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/60 to-transparent" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
-                            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
-                            <div className="relative z-10 flex h-full items-end pb-16 md:pb-24 lg:pb-32 px-[4%]">
-                                <div className="max-w-lg space-y-3 md:space-y-4">
-                                    <div className="h-10 md:h-14 w-72 md:w-96 rounded bg-neutral-700/60 animate-pulse" />
-                                    <div className="space-y-2">
-                                        <div className="h-3 w-80 rounded bg-neutral-700/50 animate-pulse" />
-                                        <div className="h-3 w-60 rounded bg-neutral-700/50 animate-pulse" />
-                                    </div>
-                                    <div className="flex items-center gap-2 md:gap-3 pt-1">
-                                        <div className="h-11 w-24 rounded bg-neutral-700/60 animate-pulse" />
-                                        <div className="h-11 w-32 rounded bg-neutral-700/60 animate-pulse" />
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-                    ) : featuredShow ? (
+                    <FilimLoadingSurface show={showSplash} className="z-[90]" />
+
+                    {featuredShow ? (
                         <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[320px] md:min-h-[500px]">
-                            <div className="absolute inset-0">
+                            <div className={`absolute inset-0 transition-opacity duration-500 ease-out ${billboardReady ? "opacity-100" : "opacity-0"}`}>
                                 {featuredShow.banner_image_url || featuredShow.poster_image_url ? (
                                     <Image
                                         src={featuredShow.banner_image_url || (featuredShow.poster_image_url as string)}
@@ -221,13 +271,15 @@ export default function HomePage() {
                                         priority
                                         sizes="100vw"
                                         className="object-cover"
+                                        onLoad={() => setBillboardImageReady(true)}
+                                        onError={() => setBillboardImageReady(true)}
                                     />
                                 ) : null}
                                 <div className="absolute inset-0 bg-gradient-to-r from-background via-background/60 to-transparent" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
                                 <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
                             </div>
-                            <div className="relative z-10 flex h-full items-end pb-16 md:pb-24 lg:pb-32 px-[4%]">
+                            <div className={`relative z-10 flex h-full items-end pb-16 md:pb-24 lg:pb-32 px-[4%] transition-opacity duration-300 ease-out ${billboardReady ? "opacity-100" : "opacity-0"}`}>
                                 <div className="max-w-lg animate-fade-in-up space-y-3 md:space-y-4">
                                     <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.1] drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
                                         {featuredShow.title}
@@ -262,86 +314,91 @@ export default function HomePage() {
                                 </div>
                             </div>
                         </section>
+                    ) : !isInitialLoading ? (
+                        <div className="w-full h-[20vh] min-h-[120px]" />
                     ) : null}
 
                     <div className="relative z-10 -mt-10 md:-mt-16 space-y-4 md:space-y-6 pb-4">
                         {continueWatching.data && continueWatching.data.length > 0 && (
-                            <SectionRow title="Continue Watching">
-                                {continueWatching.data
-                                    .filter(
-                                        (item) =>
-                                            item.show_id &&
-                                            item.show_id !== "undefined" &&
-                                            item.episode &&
-                                            item.episode !== "undefined"
-                                    )
-                                    .map((item) => {
-                                        return (
-                                            <ContinueCard
-                                                key={`${item.show_id}-${item.episode}`}
-                                                title={
-                                                    item.show_title && item.show_title.length > 0
-                                                        ? item.show_title
-                                                        : `Episode ${item.episode}`
-                                                }
-                                                subtitle={`Episode ${item.episode}`}
-                                                href={`/watch/${item.show_id}/${item.episode}`}
-                                                coverImageUrl={item.cover_image_url ?? undefined}
-                                                progress={item.progress}
-                                                positionSeconds={item.position_seconds}
-                                                durationSeconds={item.duration_seconds}
-                                                isInList={isInList(item.show_id)}
-                                                onToggleList={() => handleToggleList(item.show_id)}
-                                                showId={item.show_id}
-                                            />
-                                        );
-                                    })}
-                            </SectionRow>
+                            <div className="animate-fade-in-up">
+                                <SectionRow title="Continue Watching">
+                                    {continueWatching.data
+                                        .filter(
+                                            (item) =>
+                                                item.show_id &&
+                                                item.show_id !== "undefined" &&
+                                                item.episode &&
+                                                item.episode !== "undefined"
+                                        )
+                                        .map((item) => {
+                                            return (
+                                                <ContinueCard
+                                                    key={`${item.show_id}-${item.episode}`}
+                                                    title={
+                                                        item.show_title && item.show_title.length > 0
+                                                            ? item.show_title
+                                                            : `Episode ${item.episode}`
+                                                    }
+                                                    subtitle={`Episode ${item.episode}`}
+                                                    href={`/watch/${item.show_id}/${item.episode}`}
+                                                    coverImageUrl={item.cover_image_url ?? undefined}
+                                                    progress={item.progress}
+                                                    positionSeconds={item.position_seconds}
+                                                    durationSeconds={item.duration_seconds}
+                                                    isInList={isInList(item.show_id)}
+                                                    onToggleList={() => handleToggleList(item.show_id)}
+                                                    showId={item.show_id}
+                                                />
+                                            );
+                                        })}
+                                </SectionRow>
+                            </div>
                         )}
 
-                        {recommendations.data?.filter(section => section.items.length > 0).map((section) => (
-                            <SectionRow key={section.id} title={section.title}>
-                                {section.items.map((row) => (
-                                    <ShowCard
-                                        key={row.id}
-                                        show={row}
-                                        isInList={isInList(row.id)}
-                                        onToggleList={() => handleToggleList(row.id)}
-                                    />
-                                ))}
-                            </SectionRow>
+                        {deduplicatedRecommendations.map((section, index) => (
+                            <div
+                                key={section.id}
+                                className="animate-fade-in-up"
+                                style={{ animationDelay: `${Math.min(index * 60, 300)}ms` }}
+                            >
+                                <SectionRow title={section.title}>
+                                    {section.items.map((row) => (
+                                        <ShowCard
+                                            key={row.id}
+                                            show={row}
+                                            isInList={isInList(row.id)}
+                                            onToggleList={() => handleToggleList(row.id)}
+                                        />
+                                    ))}
+                                </SectionRow>
+                            </div>
                         ))}
 
-
                         {discoverySections.map((section) => (
-                            <SectionRow key={section.id} title={section.title}>
-                                {section.items.map((row) => (
-                                    <ShowCard
-                                        key={row.id}
-                                        show={row}
-                                        isInList={isInList(row.id)}
-                                        onToggleList={() => handleToggleList(row.id)}
-                                    />
-                                ))}
-                            </SectionRow>
+                            <div
+                                key={section.id}
+                                className="animate-fade-in"
+                            >
+                                <SectionRow title={section.title}>
+                                    {section.items.map((row) => (
+                                        <ShowCard
+                                            key={row.id}
+                                            show={row}
+                                            isInList={isInList(row.id)}
+                                            onToggleList={() => handleToggleList(row.id)}
+                                        />
+                                    ))}
+                                </SectionRow>
+                            </div>
                         ))}
 
                         <div ref={ref} className="min-h-[100px] flex items-center justify-center w-full">
-                            {discovery.isFetchingNextPage ? (
-                                <div className="flex flex-col items-center gap-2 py-8">
-                                    <div className="flex gap-1.5">
-                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce"></div>
-                                    </div>
-                                    <p className="text-[10px] font-bold text-ncyan/50 uppercase tracking-[0.2em] mt-2">Discovering</p>
-                                </div>
-                            ) : !discovery.hasNextPage && discovery.data && discoverySections.length > 0 ? (
+                            {!discovery.hasNextPage && discovery.data && discoverySections.length > 0 ? (
                                 <div className="py-12 text-center animate-fade-in w-full max-w-2xl mx-auto px-4">
                                     <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-800 to-transparent mb-8" />
                                     <div className="space-y-3">
                                         <h3 className="text-lg md:text-xl font-black text-white/80">
-                                            That’s all for now.
+                                            That's all for now.
                                         </h3>
                                         <p className="text-[10px] md:text-xs text-neutral-600 font-bold max-w-md mx-auto uppercase tracking-[0.3em]">
                                             Catalog Exhausted
@@ -354,7 +411,16 @@ export default function HomePage() {
                                         Back to Top ↑
                                     </button>
                                 </div>
-                            ) : null}
+                            ) : (
+                                <div className={`flex flex-col items-center gap-2 py-8 transition-opacity duration-300 ${discovery.isFetchingNextPage ? "opacity-100" : "opacity-0"}`}>
+                                    <div className="flex gap-1.5">
+                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                        <div className="w-2 h-2 bg-ncyan rounded-full animate-bounce"></div>
+                                    </div>
+                                    <p className="text-[10px] font-bold text-ncyan/50 uppercase tracking-[0.2em] mt-2">Discovering</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </>
