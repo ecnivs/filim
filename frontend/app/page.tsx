@@ -6,7 +6,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { ShowCard, type ShowSummaryCard as ShowSummary } from "@/components/ShowCard";
 import { SectionRow } from "@/components/SectionRow";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { handlePlayWithFullscreen } from "@/lib/fullscreen";
 import { ContinueCard } from "@/components/ContinueCard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "react-intersection-observer";
@@ -49,6 +50,7 @@ function genreKey(title: string): string {
 }
 
 export default function HomePage() {
+    const router = useRouter();
     const { profile, isReady } = useProfile();
     const searchParams = useSearchParams();
     const urlQuery = searchParams.get("q") || "";
@@ -243,6 +245,13 @@ export default function HomePage() {
         return `/show/${featuredShow.id}`;
     })();
 
+    const handleBillboardPlay = (e: React.MouseEvent) => {
+        if (billboardResumeHref.startsWith("/watch/")) {
+            e.preventDefault();
+            handlePlayWithFullscreen(billboardResumeHref, router);
+        }
+    };
+
     const isInitialLoading = recommendations.isLoading;
     const hasImageToLoad = !!featuredShow && !!(featuredShow.banner_image_url || featuredShow.poster_image_url);
     const billboardReady = billboardImageReady || !hasImageToLoad;
@@ -292,6 +301,7 @@ export default function HomePage() {
                                     <div className="flex items-center gap-2 md:gap-3 pt-1">
                                         <Link
                                             href={billboardResumeHref}
+                                            onClick={handleBillboardPlay}
                                             className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-6 py-2.5 md:py-2.5 text-sm font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20 min-h-[44px]"
                                         >
                                             <svg viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5 shrink-0" fill="currentColor">

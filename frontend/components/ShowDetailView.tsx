@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { ShowCard, type ShowSummaryCard } from "./ShowCard";
 import { useMemo, useState } from "react";
 import { useProfile } from "@/lib/profile-context";
+import { handlePlayWithFullscreen } from "@/lib/fullscreen";
 
 type Episode = {
     number: string;
@@ -369,6 +370,10 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                     <div className="flex items-center gap-2 md:gap-3">
                         <Link
                             href={resumeHref}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handlePlayWithFullscreen(resumeHref, router);
+                            }}
                             className="inline-flex items-center gap-2 rounded bg-ncyan px-5 md:px-8 py-2.5 md:py-2.5 text-sm md:text-base font-bold text-black hover:bg-ncyan-light transition-colors shadow-lg shadow-ncyan/20 min-h-[44px]"
                         >
                             <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="currentColor">
@@ -510,6 +515,10 @@ export function ShowDetailView({ id, initialData }: ShowDetailViewProps) {
                                 <Link
                                     key={ep.number}
                                     href={`/watch/${data.id}/${ep.number}`}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        handlePlayWithFullscreen(`/watch/${data.id}/${ep.number}`, router);
+                                    }}
                                     className="group flex items-center text-left gap-3 md:gap-6 p-3 py-4 md:p-4 rounded-lg bg-neutral-900/50 hover:bg-neutral-800 active:bg-neutral-700 transition-colors border-b border-neutral-800/50 last:border-0"
                                 >
                                     <span className="text-lg md:text-2xl font-black text-neutral-600 w-6 md:w-8 text-center shrink-0">

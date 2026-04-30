@@ -13,7 +13,7 @@ export default function ShowDetailModal({ params }: { params: { id: string } }) 
     return (
         <Modal isOpen={isVisible} onClose={() => router.back()}>
             <div className="max-h-[90vh] overflow-y-auto scrollbar-none rounded-xl">
-                <ShowDetailView id={params.id} />
+                <ShowDetailView key={params.id} id={params.id} />
             </div>
         </Modal>
     );

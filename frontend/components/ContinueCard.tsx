@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { formatTime } from "@/lib/utils";
 import { useProfile } from "@/lib/profile-context";
+import { handlePlayWithFullscreen } from "@/lib/fullscreen";
 
 type ContinueCardProps = {
     title: string;
@@ -38,7 +39,7 @@ export function ContinueCard({
     const [imageFailed, setImageFailed] = useState(false);
 
     const handleCardClick = () => {
-        router.push(href);
+        handlePlayWithFullscreen(href, router);
     };
 
     return (
@@ -82,7 +83,7 @@ export function ContinueCard({
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            router.push(href);
+                                            handlePlayWithFullscreen(href, router);
                                         }}
                                         className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black text-xs hover:bg-neutral-200 transition-colors pl-0.5"
                                     >

@@ -12,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.service import CatalogService
-from app.core.constants import COMMON_GENRES
 from app.models import ProfileListEntry, Show, ShowStats, WatchProgress
 from app.sources import ShowSummaryModel
 
@@ -61,7 +60,7 @@ class RecommendationService:
                         SELECT 1 FROM json_each(genres)
                         WHERE LOWER(value) = LOWER(:genre)
                       )
-                    ORDER BY RANDOM()
+                    ORDER BY title
                     LIMIT :limit
                 """),
                 {"genre": genre, "limit": fetch_limit},
@@ -255,43 +254,22 @@ class RecommendationService:
         )
 
     async def _fetch_raw_genres(self) -> list[str]:
-        # Always start with all known genres as a floor so the pool is never tiny.
-        counts: Counter[str] = Counter({g: 1 for g in COMMON_GENRES})
+        from sqlalchemy import text
 
         try:
-            result = await self.db.execute(select(Show.genres))
-            for row in result.scalars().all():
-                if row:
-                    counts.update([g.strip().title() for g in row if g.strip()])
+            result = await self.db.execute(
+                text("""
+                    SELECT value AS genre, COUNT(DISTINCT source_id) AS cnt
+                    FROM shows, json_each(genres)
+                    WHERE genres IS NOT NULL
+                    GROUP BY LOWER(value)
+                    HAVING COUNT(DISTINCT source_id) >= 4
+                    ORDER BY cnt DESC
+                """)
+            )
+            return [row[0].strip().title() for row in result.all() if row[0].strip()]
         except Exception:
-            pass
-
-        # Fetch two pages of popular shows to pull in additional upstream genres.
-        for page in (1, 2):
-            try:
-                popular = await self.catalog.source.get_popular_shows(
-                    limit=50, page=page
-                )
-                for show in popular:
-                    if show.tags:
-                        counts.update(
-                            [g.strip().title() for g in show.tags if g.strip()]
-                        )
-                if len(counts) >= 60:
-                    break
-            except Exception:
-                break
-
-        dynamic = []
-        seen: set[str] = set()
-        for g, _ in counts.most_common(200):
-            if g not in seen:
-                seen.add(g)
-                dynamic.append(g)
-                if len(dynamic) >= 150:
-                    break
-
-        return dynamic
+            return []
 
     async def _get_dynamic_genres(
         self, exclude: List[str] | None = None, profile_id: str | None = None
@@ -306,13 +284,7 @@ class RecommendationService:
             genres = _genres_cache[0]
 
         exclude_set = {g.strip().title() for g in (exclude or [])}
-        genres = [g for g in genres if g not in exclude_set]
-
-        # Shuffle deterministically per profile per day so different profiles
-        # and different days yield different discovery orderings.
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        seed = f"{profile_id or 'guest'}:{today}"
-        return _seeded_shuffle(genres, seed)
+        return [g for g in genres if g not in exclude_set]
 
     async def get_discovery_sections(
         self,
@@ -334,69 +306,46 @@ class RecommendationService:
             exclude=exclude_genres, profile_id=profile_id
         )
 
-        if not genres or cursor >= len(genres):
+        if not genres:
             return [], None
 
-        batch_size = min(limit * 5, 25)
-        end = min(cursor + batch_size, len(genres))
-        batch = genres[cursor:end]
+        total = len(genres)
+        lap, pos = divmod(cursor, total)
 
-        # DB-first: check which genres have enough local data.
-        db_results: dict[str, list[ShowSummaryModel]] = {}
-        needs_upstream: list[str] = []
-        for genre in batch:
-            items = await self._genre_shows_from_db(genre, 20, set())
-            if len(items) >= 10:
-                db_results[genre] = items
-            else:
-                needs_upstream.append(genre)
+        # Reshuffle each lap so repeated cycles have different ordering.
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        lap_seed = f"{profile_id or 'guest'}:{today}:lap{lap}"
+        genres = _seeded_shuffle(genres, lap_seed)
 
-        # Fetch upstream for remaining genres in parallel (preserves old perf).
-        upstream_fetches = await asyncio.gather(
-            *[self.catalog.search(query="", genres=[g], page=1) for g in needs_upstream],
-            return_exceptions=True,
-        )
-        upstream_results: dict[str, list[ShowSummaryModel]] = {}
-        for genre, result in zip(needs_upstream, upstream_fetches):
-            if isinstance(result, Exception) or not result:
-                upstream_results[genre] = []
-            else:
-                genre_lower = genre.lower()
-                upstream_results[genre] = [
-                    r for r in result
-                    if genre_lower in [t.lower() for t in (r.tags or [])]
-                ]
+        # Buffer: try up to limit*3 genres to fill limit sections (dedup may reduce items).
+        batch_size = min(limit * 3, total - pos)
+        batch = genres[pos : pos + batch_size]
 
         sections: list[RecommendationSectionModel] = []
         seen_ids: set[str] = set()
+        genres_iterated = 0
 
         for genre in batch:
             if len(sections) >= limit:
                 break
+            genres_iterated += 1
 
-            if genre in db_results:
-                # Re-run with seen_ids now populated for proper dedup.
-                final_items = await self._genre_shows_from_db(genre, 20, seen_ids)
-            else:
-                final_items = [
-                    r for r in upstream_results.get(genre, [])
-                    if r.id not in seen_ids
-                ][:20]
-
+            final_items = await self._genre_shows_from_db(genre, 20, seen_ids)
             for item in final_items:
                 seen_ids.add(item.id)
 
-            if final_items:
+            if len(final_items) >= 4:
                 slug = genre.lower().replace(" ", "_")
                 sections.append(
                     RecommendationSectionModel(
-                        id=f"genre_{slug}",
+                        id=f"genre_{slug}_lap{lap}",
                         title=genre,
                         items=final_items,
                     )
                 )
 
-        next_cursor: int | None = end if end < len(genres) else None
+        next_pos = cursor + genres_iterated
+        next_cursor: int | None = None if next_pos >= total else next_pos
         return sections, next_cursor
 
     async def get_device_recommendations(

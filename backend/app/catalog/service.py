@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import (
-    COMMON_GENRES,
     MODE_SUB,
     RELATIONS_FOR_SIMILAR,
     SUPPORTED_RELATIONS,
@@ -52,6 +51,64 @@ class CatalogService:
         self.db = db
         self.source = source or get_catalog_adapter()
 
+    async def _db_genre_exists(self, genre: str) -> bool:
+        from sqlalchemy import text
+        result = await self.db.execute(
+            text("""
+                SELECT 1 FROM shows, json_each(genres)
+                WHERE genres IS NOT NULL AND LOWER(value) = LOWER(:genre)
+                LIMIT 1
+            """),
+            {"genre": genre},
+        )
+        return result.first() is not None
+
+    async def _search_db_by_genre(
+        self, genre: str, page: int = 1, limit: int = 40
+    ) -> list[ShowSummaryModel]:
+        import json as _json
+        from sqlalchemy import text
+        offset = (page - 1) * limit
+        result = await self.db.execute(
+            text("""
+                SELECT source_id, title, english_title, synopsis, genres,
+                       episode_count, poster_url, cover_image_url
+                FROM shows
+                WHERE genres IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM json_each(genres)
+                    WHERE LOWER(value) = LOWER(:genre)
+                  )
+                ORDER BY title
+                LIMIT :limit OFFSET :offset
+            """),
+            {"genre": genre, "limit": limit, "offset": offset},
+        )
+        rows = result.mappings().all()
+        out: list[ShowSummaryModel] = []
+        for row in rows:
+            raw = row["genres"]
+            if isinstance(raw, str):
+                try:
+                    tags = _json.loads(raw)
+                except Exception:
+                    tags = []
+            elif isinstance(raw, list):
+                tags = raw
+            else:
+                tags = []
+            out.append(ShowSummaryModel(
+                id=row["source_id"],
+                title=row["title"],
+                english_title=row["english_title"],
+                episode_count=row["episode_count"] or 0,
+                synopsis=row["synopsis"],
+                tags=tags,
+                poster_image_url=row["poster_url"],
+                banner_image_url=row["cover_image_url"],
+            ))
+        return out
+
     async def search(
         self,
         query: str,
@@ -59,18 +116,21 @@ class CatalogService:
         page: int = 1,
         genres: list[str] | None = None,
     ) -> list[ShowSummaryModel]:
-        search_genres = genres or []
-        if not genres and " " not in query:
-            q_clean = query.strip().title()
-            if q_clean in COMMON_GENRES:
-                search_genres = [q_clean]
+        # Explicit genre filter — search DB directly.
+        if genres:
+            db_results = await self._search_db_by_genre(genres[0], page=page)
+            if db_results:
+                return self._deduplicate_results(db_results)
 
-        search_query = query
-        if search_genres and query.strip().title() in search_genres:
-            search_query = ""
+        # Check if the query itself is a known genre in DB.
+        q_clean = query.strip()
+        if q_clean and await self._db_genre_exists(q_clean):
+            db_results = await self._search_db_by_genre(q_clean, page=page)
+            if db_results:
+                return self._deduplicate_results(db_results)
 
         results = await self.source.search_shows(
-            query=search_query, mode=mode, page=page, genres=search_genres or None
+            query=q_clean, mode=mode, page=page, genres=None
         )
         return self._deduplicate_results(results)
 
@@ -153,6 +213,21 @@ class CatalogService:
         search_query: str | None = None,
     ) -> ShowSummaryModel:
         """Return show metadata, with fallbacks for IDs that only resolve via search."""
+
+        # DB-first: if we have complete data locally, skip upstream entirely.
+        db_result = await self.db.execute(select(Show).where(Show.source_id == show_id))
+        db_row = db_result.scalar_one_or_none()
+        if db_row and db_row.title and db_row.episode_count:
+            return ShowSummaryModel(
+                id=db_row.source_id,
+                title=db_row.title,
+                english_title=db_row.english_title,
+                episode_count=db_row.episode_count or 0,
+                synopsis=db_row.synopsis,
+                tags=db_row.genres or [],
+                poster_image_url=db_row.poster_url,
+                banner_image_url=db_row.cover_image_url,
+            )
 
         details = await self.source.get_show_details(show_id=show_id, mode=mode)
 
