@@ -2,7 +2,10 @@
 const nextConfig = {
 
     experimental: {
-        proxyTimeout: 180_000
+        proxyTimeout: 180_000,
+        workerThreads: false,
+        cpus: 1,
+        memoryBasedWorkersCount: true
     },
     reactStrictMode: true,
     images: {
