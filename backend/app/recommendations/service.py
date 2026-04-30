@@ -46,44 +46,59 @@ class RecommendationService:
     async def _genre_shows_from_db(
         self, genre: str, limit: int, exclude_ids: set[str]
     ) -> list[ShowSummaryModel]:
+        import json as _json
         from sqlalchemy import text
 
-        fetch_limit = limit + len(exclude_ids) + 20
-        result = await self.db.execute(
-            text("""
-                SELECT source_id, title, english_title, synopsis, genres,
-                       episode_count, poster_url, cover_image_url
-                FROM shows
-                WHERE genres IS NOT NULL
-                  AND EXISTS (
-                    SELECT 1 FROM json_each(genres)
-                    WHERE LOWER(value) = LOWER(:genre)
-                  )
-                ORDER BY RANDOM()
-                LIMIT :limit
-            """),
-            {"genre": genre, "limit": fetch_limit},
-        )
-        rows = result.mappings().all()
-        out: list[ShowSummaryModel] = []
-        for row in rows:
-            if row["source_id"] in exclude_ids:
-                continue
-            out.append(
-                ShowSummaryModel(
-                    id=row["source_id"],
-                    title=row["title"],
-                    english_title=row["english_title"],
-                    episode_count=row["episode_count"] or 0,
-                    synopsis=row["synopsis"],
-                    tags=row["genres"] or [],
-                    poster_image_url=row["poster_url"],
-                    banner_image_url=row["cover_image_url"],
-                )
+        try:
+            fetch_limit = limit + len(exclude_ids) + 20
+            result = await self.db.execute(
+                text("""
+                    SELECT source_id, title, english_title, synopsis, genres,
+                           episode_count, poster_url, cover_image_url
+                    FROM shows
+                    WHERE genres IS NOT NULL
+                      AND EXISTS (
+                        SELECT 1 FROM json_each(genres)
+                        WHERE LOWER(value) = LOWER(:genre)
+                      )
+                    ORDER BY RANDOM()
+                    LIMIT :limit
+                """),
+                {"genre": genre, "limit": fetch_limit},
             )
-            if len(out) >= limit:
-                break
-        return out
+            rows = result.mappings().all()
+            out: list[ShowSummaryModel] = []
+            for row in rows:
+                if row["source_id"] in exclude_ids:
+                    continue
+                # Raw SQL bypasses SQLAlchemy JSON type processing — deserialize manually.
+                raw_genres = row["genres"]
+                if isinstance(raw_genres, str):
+                    try:
+                        genres = _json.loads(raw_genres)
+                    except Exception:
+                        genres = []
+                elif isinstance(raw_genres, list):
+                    genres = raw_genres
+                else:
+                    genres = []
+                out.append(
+                    ShowSummaryModel(
+                        id=row["source_id"],
+                        title=row["title"],
+                        english_title=row["english_title"],
+                        episode_count=row["episode_count"] or 0,
+                        synopsis=row["synopsis"],
+                        tags=genres,
+                        poster_image_url=row["poster_url"],
+                        banner_image_url=row["cover_image_url"],
+                    )
+                )
+                if len(out) >= limit:
+                    break
+            return out
+        except Exception:
+            return []
 
     async def _shows_from_rows(self, rows: list[Show]) -> list[ShowSummaryModel]:
         return [
