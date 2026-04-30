@@ -408,7 +408,7 @@ export default function HomePage() {
                                     <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-800 to-transparent mb-8" />
                                     <div className="space-y-3">
                                         <h3 className="text-lg md:text-xl font-black text-white/80">
-                                            That's all for now.
+                                            That&apos;s all for now.
                                         </h3>
                                         <p className="text-[10px] md:text-xs text-neutral-600 font-bold max-w-md mx-auto uppercase tracking-[0.3em]">
                                             Catalog Exhausted
