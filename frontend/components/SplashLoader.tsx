@@ -21,7 +21,7 @@ export function SplashLoader({
         } else {
             const timer = setTimeout(() => {
                 setStableLoading(false);
-            }, 800);
+            }, 80);
             return () => clearTimeout(timer);
         }
     }, [isLoading]);
@@ -29,7 +29,7 @@ export function SplashLoader({
     useEffect(() => {
         const timer = setTimeout(() => {
             setMinTimePassed(true);
-        }, 1200);
+        }, 150);
         return () => clearTimeout(timer);
     }, []);
 
@@ -40,7 +40,7 @@ export function SplashLoader({
             const doneTimer = setTimeout(() => {
                 if (onComplete) onComplete();
                 setShouldRender(false);
-            }, 500);
+            }, 300);
 
             return () => clearTimeout(doneTimer);
         }

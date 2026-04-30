@@ -38,26 +38,25 @@ import { GridView } from "@/components/GridView";
 import { FilimLoadingSurface } from "@/components/FilimLoadingSurface";
 
 export default function HomePage() {
-    const { profile } = useProfile();
+    const { profile, isReady } = useProfile();
     const searchParams = useSearchParams();
     const urlQuery = searchParams.get("q") || "";
     const urlGenres = searchParams.get("genres") || "";
 
     const continueWatching = useQuery({
-        queryKey: ["continue-watching"],
-        enabled: !profile?.is_guest,
+        queryKey: ["continue-watching", profile?.id],
+        enabled: isReady && !!profile?.id && !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<{ items: ContinueWatchingItem[] }>(
                 "/user/continue-watching"
             );
             return res.data.items;
         },
-        staleTime: 0,
-        refetchOnMount: "always",
+        staleTime: 30 * 1000,
     });
 
     const recommendations = useQuery({
-        queryKey: ["recommendations"],
+        queryKey: ["recommendations", profile?.id],
         queryFn: async () => {
             const res = await api.get<{ sections: RecommendationSection[] }>(
                 "/user/recommendations"
@@ -137,16 +136,18 @@ export default function HomePage() {
 
     const featuredShow = useMemo(() => {
         const inProgressIds = new Set(continueWatching.data?.map((i) => i.show_id) ?? []);
-        const candidates = recommendations.data?.flatMap((s) => s.items) ?? [];
 
-        const withBanners = candidates.filter(
-            (a) => a.banner_image_url?.startsWith("http") && !inProgressIds.has(a.id)
-        );
-        const withPosters = candidates.filter(
-            (a) => a.poster_image_url?.startsWith("http") && !inProgressIds.has(a.id)
-        );
-        const pool = withBanners.length > 0 ? withBanners : withPosters;
-        if (pool.length === 0) return undefined;
+        // Primary pool: profile-specific recommendations. Fallback: discovery sections.
+        const recItems = recommendations.data?.flatMap((s) => s.items) ?? [];
+        const discoveryItems = discoverySections.flatMap((s) => s.items);
+        const allItems = recItems.length > 0 ? recItems : discoveryItems;
+
+        const candidates = allItems.filter((a) => !inProgressIds.has(a.id));
+        if (candidates.length === 0) return undefined;
+
+        const withBanners = candidates.filter((a) => a.banner_image_url?.startsWith("http"));
+        const withPosters = candidates.filter((a) => a.poster_image_url?.startsWith("http"));
+        const pool = withBanners.length > 0 ? withBanners : withPosters.length > 0 ? withPosters : candidates;
 
         // Rotate daily, vary by profile — stable within a session.
         const dayIndex = Math.floor(Date.now() / 86_400_000);
@@ -154,7 +155,7 @@ export default function HomePage() {
             ? profile.id.charCodeAt(0) + profile.id.charCodeAt(profile.id.length - 1)
             : 0;
         return pool[(dayIndex + profileSeed) % Math.min(pool.length, 5)];
-    }, [recommendations.data, continueWatching.data, profile?.id]);
+    }, [recommendations.data, discoverySections, continueWatching.data, profile?.id]);
 
     const billboardResumeHref = (() => {
         if (!featuredShow) return "#";
@@ -178,7 +179,27 @@ export default function HomePage() {
             ) : (
                 <>
                     <FilimLoadingSurface show={isInitialLoading} className="z-[90]" />
-                    {featuredShow && (
+                    {(isInitialLoading || (discovery.isLoading && !featuredShow)) ? (
+                        <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[320px] md:min-h-[500px] overflow-hidden bg-neutral-900">
+                            <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-800" />
+                            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/60 to-transparent" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+                            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
+                            <div className="relative z-10 flex h-full items-end pb-16 md:pb-24 lg:pb-32 px-[4%]">
+                                <div className="max-w-lg space-y-3 md:space-y-4">
+                                    <div className="h-10 md:h-14 w-72 md:w-96 rounded bg-neutral-700/60 animate-pulse" />
+                                    <div className="space-y-2">
+                                        <div className="h-3 w-80 rounded bg-neutral-700/50 animate-pulse" />
+                                        <div className="h-3 w-60 rounded bg-neutral-700/50 animate-pulse" />
+                                    </div>
+                                    <div className="flex items-center gap-2 md:gap-3 pt-1">
+                                        <div className="h-11 w-24 rounded bg-neutral-700/60 animate-pulse" />
+                                        <div className="h-11 w-32 rounded bg-neutral-700/60 animate-pulse" />
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    ) : featuredShow ? (
                         <section className="relative w-full h-[56vh] md:h-[80vh] min-h-[320px] md:min-h-[500px]">
                             <div className="absolute inset-0">
                                 {featuredShow.banner_image_url || featuredShow.poster_image_url ? (
@@ -230,7 +251,7 @@ export default function HomePage() {
                                 </div>
                             </div>
                         </section>
-                    )}
+                    ) : null}
 
                     <div className="relative z-10 -mt-10 md:-mt-16 space-y-4 md:space-y-6 pb-4">
                         {continueWatching.data && continueWatching.data.length > 0 && (

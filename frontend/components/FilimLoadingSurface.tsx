@@ -19,7 +19,7 @@ export function FilimLoadingSurface({
     const position = fillParent ? "absolute inset-0" : "fixed inset-0";
     const transition = fillParent
         ? "transition-opacity duration-150 ease-out"
-        : "transition-opacity duration-500 ease-in-out";
+        : "transition-opacity duration-300 ease-in-out";
     return (
         <div
             className={`${position} flex items-center justify-center bg-black ${transition} ${visibility} ${className}`.trim()}

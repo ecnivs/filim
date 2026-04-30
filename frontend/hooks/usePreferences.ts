@@ -18,8 +18,8 @@ export function usePreferences() {
     const { profile } = useProfile();
 
     const preferences = useQuery({
-        queryKey: ["preferences"],
-        enabled: !profile?.is_guest,
+        queryKey: ["preferences", profile?.id],
+        enabled: !!profile?.id && !profile?.is_guest,
         queryFn: async () => {
             const res = await api.get<PreferencesResponse>("/user/preferences");
             return res.data.items;
@@ -38,7 +38,7 @@ export function usePreferences() {
             });
         },
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ["preferences"] });
+            void queryClient.invalidateQueries({ queryKey: ["preferences", profile?.id] });
         }
     });
 

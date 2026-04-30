@@ -36,51 +36,57 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         async function init() {
             try {
                 const raw = window.localStorage.getItem(STORAGE_KEY);
-                if (raw) {
-                    const parsed = JSON.parse(raw) as ActiveProfile;
-                    if (parsed?.id && parsed?.name) {
-                        const res = await fetch(`/api/v1/profiles/${parsed.id}`, {
-                            headers: { "X-Profile-Id": parsed.id }
-                        });
+                if (!raw) {
+                    setIsReady(true);
+                    return;
+                }
 
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data.is_locked) {
-                                // Locked profile requires PIN. Allow if the user
-                                // already authenticated this tab session (flag set
-                                // in sessionStorage by the PIN dialog on success).
-                                // sessionStorage survives hard reloads but clears
-                                // when the tab is closed, so PIN is required once
-                                // per tab session.
-                                const verified = sessionStorage.getItem(
-                                    `filim.pinVerified.${parsed.id}`
-                                );
-                                if (!verified) {
-                                    window.localStorage.removeItem(STORAGE_KEY);
-                                    setProfileState(null);
-                                } else {
-                                    setProfileState({
-                                        id: data.id,
-                                        name: data.name,
-                                        is_guest: data.is_guest
-                                    });
-                                }
-                            } else {
-                                setProfileState({
-                                    id: data.id,
-                                    name: data.name,
-                                    is_guest: data.is_guest
-                                });
-                            }
-                        } else {
+                const parsed = JSON.parse(raw) as ActiveProfile;
+                if (!parsed?.id || !parsed?.name) {
+                    setIsReady(true);
+                    return;
+                }
+
+                // Optimistically set profile from localStorage so UI unblocks immediately,
+                // then validate in background and revert if server rejects.
+                setProfileState(parsed);
+                setIsReady(true);
+
+                const res = await fetch(`/api/v1/profiles/${parsed.id}`, {
+                    headers: { "X-Profile-Id": parsed.id }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.is_locked) {
+                        // sessionStorage survives hard reloads but clears when tab closes,
+                        // so PIN is required once per tab session.
+                        const verified = sessionStorage.getItem(
+                            `filim.pinVerified.${parsed.id}`
+                        );
+                        if (!verified) {
                             window.localStorage.removeItem(STORAGE_KEY);
                             setProfileState(null);
+                        } else {
+                            setProfileState({
+                                id: data.id,
+                                name: data.name,
+                                is_guest: data.is_guest
+                            });
                         }
+                    } else {
+                        setProfileState({
+                            id: data.id,
+                            name: data.name,
+                            is_guest: data.is_guest
+                        });
                     }
+                } else {
+                    window.localStorage.removeItem(STORAGE_KEY);
+                    setProfileState(null);
                 }
             } catch (err) {
                 console.error("Profile initialization failed. If you switched tunnel URLs, your active profile selection may have been reset by the browser.", err);
-            } finally {
                 setIsReady(true);
             }
         }

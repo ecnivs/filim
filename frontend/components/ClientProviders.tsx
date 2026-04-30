@@ -1,7 +1,9 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
-import { QueryClient, QueryClientProvider, useIsFetching } from "@tanstack/react-query";
+import { ReactNode, useState } from "react";
+import { QueryClient } from "@tanstack/react-query";
+import { Persister, PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { ProfileProvider, useProfile } from "@/lib/profile-context";
 import { SplashLoader } from "./SplashLoader";
 
@@ -16,8 +18,13 @@ const queryClient = new QueryClient({
     }
 });
 
+const noopPersister: Persister = {
+    persistClient: () => {},
+    restoreClient: () => undefined,
+    removeClient: () => {},
+};
+
 function SplashManager({ children }: { children: ReactNode }) {
-    const isFetching = useIsFetching();
     const { isReady: profileReady } = useProfile();
     const [splashDone, setSplashDone] = useState(false);
 
@@ -25,7 +32,7 @@ function SplashManager({ children }: { children: ReactNode }) {
         <>
             {!splashDone && (
                 <SplashLoader
-                    isLoading={isFetching > 0 || !profileReady}
+                    isLoading={!profileReady}
                     onComplete={() => setSplashDone(true)}
                 />
             )}
@@ -35,23 +42,28 @@ function SplashManager({ children }: { children: ReactNode }) {
 }
 
 export function ClientProviders({ children }: { children: ReactNode }) {
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) {
-        return <div className="bg-background min-h-screen" />;
-    }
+    const [persister] = useState<Persister>(() => {
+        if (typeof window === "undefined") return noopPersister;
+        return createSyncStoragePersister({
+            storage: window.localStorage,
+            key: "filim-query-cache",
+        });
+    });
 
     return (
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{
+                persister,
+                maxAge: 30 * 60 * 1000,
+                buster: "v1",
+            }}
+        >
             <ProfileProvider>
                 <SplashManager>
                     {children}
                 </SplashManager>
             </ProfileProvider>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
     );
 }
