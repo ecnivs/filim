@@ -17,17 +17,21 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        from app.core.catalog_refresh import run_catalog_refresh
         from app.core.warmup import run_warmup
         from app.db.cache_store import cache_client
+        from app.db.session import AsyncSessionLocal
 
         await cache_client.start_cleanup()
         warmup_task = asyncio.create_task(run_warmup())
+        refresh_task = asyncio.create_task(run_catalog_refresh(AsyncSessionLocal))
         yield
-        warmup_task.cancel()
-        try:
-            await warmup_task
-        except (asyncio.CancelledError, Exception):
-            pass
+        for task in (warmup_task, refresh_task):
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
         await cache_client.stop_cleanup()
 
     app = FastAPI(

@@ -43,6 +43,48 @@ class RecommendationService:
         self.db = db
         self.catalog = CatalogService(db=db)
 
+    async def _genre_shows_from_db(
+        self, genre: str, limit: int, exclude_ids: set[str]
+    ) -> list[ShowSummaryModel]:
+        from sqlalchemy import text
+
+        fetch_limit = limit + len(exclude_ids) + 20
+        result = await self.db.execute(
+            text("""
+                SELECT source_id, title, english_title, synopsis, genres,
+                       episode_count, poster_url, cover_image_url
+                FROM shows
+                WHERE genres IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM json_each(genres)
+                    WHERE LOWER(value) = LOWER(:genre)
+                  )
+                ORDER BY RANDOM()
+                LIMIT :limit
+            """),
+            {"genre": genre, "limit": fetch_limit},
+        )
+        rows = result.mappings().all()
+        out: list[ShowSummaryModel] = []
+        for row in rows:
+            if row["source_id"] in exclude_ids:
+                continue
+            out.append(
+                ShowSummaryModel(
+                    id=row["source_id"],
+                    title=row["title"],
+                    english_title=row["english_title"],
+                    episode_count=row["episode_count"] or 0,
+                    synopsis=row["synopsis"],
+                    tags=row["genres"] or [],
+                    poster_image_url=row["poster_url"],
+                    banner_image_url=row["cover_image_url"],
+                )
+            )
+            if len(out) >= limit:
+                break
+        return out
+
     async def _shows_from_rows(self, rows: list[Show]) -> list[ShowSummaryModel]:
         return [
             ShowSummaryModel(
@@ -284,26 +326,36 @@ class RecommendationService:
         end = min(cursor + batch_size, len(genres))
         batch = genres[cursor:end]
 
-        results = await asyncio.gather(
-            *[self.catalog.search(query="", genres=[g], page=1) for g in batch],
-            return_exceptions=True,
-        )
-
         sections: list[RecommendationSectionModel] = []
         seen_ids: set[str] = set()
 
-        for genre, result in zip(batch, results):
+        for genre in batch:
             if len(sections) >= limit:
                 break
-            if isinstance(result, Exception) or not result:
-                continue
-            final_items = []
-            for r in result:
-                if r.id not in seen_ids:
-                    final_items.append(r)
-                    seen_ids.add(r.id)
-                if len(final_items) >= 20:
-                    break
+
+            final_items = await self._genre_shows_from_db(genre, 20, seen_ids)
+
+            if len(final_items) < 10:
+                # DB doesn't have enough — fall back to upstream.
+                try:
+                    upstream = await self.catalog.search(query="", genres=[genre], page=1)
+                except Exception:
+                    upstream = []
+                genre_lower = genre.lower()
+                upstream_items: list[ShowSummaryModel] = []
+                for r in upstream:
+                    if r.id in seen_ids:
+                        continue
+                    if genre_lower not in [t.lower() for t in (r.tags or [])]:
+                        continue
+                    upstream_items.append(r)
+                    if len(upstream_items) >= 20:
+                        break
+                final_items = upstream_items
+
+            for item in final_items:
+                seen_ids.add(item.id)
+
             if final_items:
                 slug = genre.lower().replace(" ", "_")
                 sections.append(

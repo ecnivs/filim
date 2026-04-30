@@ -14,7 +14,7 @@ from app.core.flaresolverr import flarefetch
 from app.db.cache_store import cache_client
 from app.sources import StreamCandidateModel
 
-_CLOCK_CACHE_TTL = 600   # 10 minutes
+_CLOCK_CACHE_TTL = 315360000  # permanent
 _PROBE_CACHE_TTL = 300   # 5 minutes
 
 # Shared connection pool reused across all resolver calls.

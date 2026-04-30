@@ -1,3 +1,18 @@
+"""Stale-while-revalidate cache decorator.
+
+On cache hit:
+  - Serve cached value immediately.
+  - If entry is stale (stale_at passed), fire a background re-fetch to refresh
+    the cache for the next caller.  The current caller never waits.
+
+On cache miss:
+  - Fetch synchronously, store permanently with stale_seconds TTL.
+
+_refreshing_keys prevents multiple concurrent background re-fetches for the
+same cache key.
+"""
+
+import asyncio
 import functools
 import hashlib
 import json
@@ -7,17 +22,20 @@ from typing import Any, Callable, Optional, Type, TypeVar
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
-from app.db.cache_store import cache_client as redis_client
+from app.db.cache_store import _DEFAULT_STALE_SECONDS, cache_client as redis_client
 
 T = TypeVar("T")
 
+_refreshing_keys: set[str] = set()
+
 
 def cache_response(
-    ttl_seconds: int = 300,
+    ttl_seconds: int = 315360000,
+    stale_seconds: int = _DEFAULT_STALE_SECONDS,
     key_prefix: str = "filim:cache:v2:",
     response_model: Optional[Type[BaseModel]] = None,
 ):
-    """Decorator to cache function results with Pydantic model awareness."""
+    """Permanently cache function results with stale-while-revalidate semantics."""
 
     def decorator(func: Callable[..., Any]):
         @functools.wraps(func)
@@ -30,6 +48,16 @@ def cache_response(
             try:
                 cached = await redis_client.get(key)
                 if cached:
+                    if (
+                        await redis_client.is_stale(key)
+                        and key not in _refreshing_keys
+                    ):
+                        _refreshing_keys.add(key)
+                        asyncio.create_task(
+                            _background_refresh(
+                                func, args, kwargs, key, stale_seconds
+                            )
+                        )
                     data = json.loads(cached)
                     if response_model:
                         if isinstance(data, list):
@@ -40,26 +68,49 @@ def cache_response(
                     return data
             except Exception:
                 logging.exception(f"Cache read error for key: {key}")
-                pass
 
             result = await func(*args, **kwargs)
 
-            # Never cache empty collections — empty results are usually transient
-            # failures (CF block, decryption miss) and must not poison the cache.
             cacheable = result is not None and result != [] and result != {}
             if cacheable:
                 try:
                     data_to_cache = jsonable_encoder(result)
-
                     await redis_client.setex(
-                        key, ttl_seconds, json.dumps(data_to_cache)
+                        key,
+                        ttl_seconds,
+                        json.dumps(data_to_cache),
+                        stale_seconds=stale_seconds,
                     )
                 except Exception:
                     logging.exception(f"Cache write error for key: {key}")
-                    pass
 
             return result
 
         return wrapper
 
     return decorator
+
+
+async def _background_refresh(
+    func: Callable,
+    args: tuple,
+    kwargs: dict,
+    key: str,
+    stale_seconds: int,
+) -> None:
+    try:
+        result = await func(*args, **kwargs)
+        cacheable = result is not None and result != [] and result != {}
+        if cacheable:
+            data_to_cache = jsonable_encoder(result)
+            await redis_client.setex(
+                key,
+                315360000,
+                json.dumps(data_to_cache),
+                stale_seconds=stale_seconds,
+            )
+            logging.debug("Background refresh complete for key: %s", key)
+    except Exception:
+        logging.warning("Background refresh failed for key: %s", key)
+    finally:
+        _refreshing_keys.discard(key)

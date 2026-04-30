@@ -1,15 +1,13 @@
 """Two-tier persistent cache: in-memory L1 + SQLite L2.
 
-L1 (dict) serves reads with zero latency.  L2 (SQLite with WAL) ensures
-cached API responses survive backend restarts so cold starts don't hammer
-upstream through FlareSolverr.
+Entries are stored permanently — nothing is evicted by time.  Each entry
+carries a separate `stale_at` timestamp (default 7 days from write).
+Staleness is used by the cache_response decorator to trigger a background
+re-fetch while serving the cached value immediately (stale-while-revalidate).
 
-On first access the L2 table is created (if needed) and all non-expired
-rows are loaded into L1.  Every write goes to both tiers.  A background
-task periodically prunes expired entries from both layers.
-
-A single persistent aiosqlite connection is kept open for the worker's
-lifetime, avoiding the overhead of open/close on every cache operation.
+L1 tuple layout: (value: str, expires_at: float, stale_at: float)
+  - expires_at is always set to FAR_FUTURE so nothing is pruned.
+  - stale_at controls when background re-fetch is triggered.
 """
 
 from __future__ import annotations
@@ -24,6 +22,9 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
+FAR_FUTURE = 32503680000.0  # year 3000 — effectively permanent
+_DEFAULT_STALE_SECONDS = 604800  # 7 days
+
 
 def _db_path() -> str:
     from app.core.config import settings
@@ -32,18 +33,15 @@ def _db_path() -> str:
 
 
 class PersistentCache:
-    """Two-tier cache backed by SQLite for cross-restart persistence."""
+    """Two-tier cache backed by SQLite.  Entries never expire; staleness
+    triggers background revalidation rather than eviction."""
 
     def __init__(self) -> None:
-        self._l1: Dict[str, Tuple[str, float]] = {}
+        self._l1: Dict[str, Tuple[str, float, float]] = {}  # value, expires_at, stale_at
         self._db: Optional[aiosqlite.Connection] = None
         self._initialized: bool = False
         self._init_lock: Optional[asyncio.Lock] = None
         self._cleanup_task: Optional[asyncio.Task] = None
-
-    # ------------------------------------------------------------------
-    # Lazy initialisation (called on first get/set)
-    # ------------------------------------------------------------------
 
     async def _ensure_init(self) -> None:
         if self._initialized:
@@ -62,7 +60,6 @@ class PersistentCache:
         return self._db
 
     async def _bootstrap(self) -> None:
-        """Create schema and hydrate L1 from L2."""
         db = await self._get_db()
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA synchronous=NORMAL")
@@ -72,7 +69,8 @@ class PersistentCache:
             CREATE TABLE IF NOT EXISTS cache (
                 key        TEXT PRIMARY KEY,
                 value      TEXT NOT NULL,
-                expires_at REAL NOT NULL
+                expires_at REAL NOT NULL,
+                stale_at   REAL NOT NULL DEFAULT 0
             )
             """
         )
@@ -81,22 +79,37 @@ class PersistentCache:
         )
         await db.commit()
 
+        # Migrate existing rows that lack stale_at column — must happen before
+        # creating the index on stale_at so the column exists first.
+        try:
+            await db.execute(
+                "ALTER TABLE cache ADD COLUMN stale_at REAL NOT NULL DEFAULT 0"
+            )
+            await db.commit()
+        except Exception:
+            pass  # Column already exists.
+
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cache_stale ON cache(stale_at)"
+        )
+        await db.commit()
+
+        # Migrate old short-TTL entries to permanent storage.
         now = time.time()
+        await db.execute(
+            "UPDATE cache SET expires_at = ? WHERE expires_at < ?",
+            (FAR_FUTURE, now + 86400 * 365),
+        )
+        await db.commit()
+
         cursor = await db.execute(
-            "SELECT key, value, expires_at FROM cache WHERE expires_at > ?",
+            "SELECT key, value, expires_at, stale_at FROM cache WHERE expires_at > ?",
             (now,),
         )
         rows = await cursor.fetchall()
-        for key, value, exp in rows:
-            self._l1[key] = (value, exp)
+        for key, value, exp, stale_at in rows:
+            self._l1[key] = (value, exp, stale_at)
         logger.info("Cache: loaded %d entries from disk", len(rows))
-
-        await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
-        await db.commit()
-
-    # ------------------------------------------------------------------
-    # Public API (matches the old InMemoryCache interface)
-    # ------------------------------------------------------------------
 
     async def get(self, key: str) -> Optional[str]:
         await self._ensure_init()
@@ -104,39 +117,71 @@ class PersistentCache:
 
         entry = self._l1.get(key)
         if entry is not None:
-            value, exp = entry
+            value, exp, _ = entry
             if exp > now:
                 return value
             del self._l1[key]
             return None
 
-        # L2 lookup (another process may have written)
         try:
             db = await self._get_db()
             cursor = await db.execute(
-                "SELECT value, expires_at FROM cache WHERE key = ?", (key,)
+                "SELECT value, expires_at, stale_at FROM cache WHERE key = ?", (key,)
             )
             row = await cursor.fetchone()
             if row and row[1] > now:
-                self._l1[key] = (row[0], row[1])
+                self._l1[key] = (row[0], row[1], row[2])
                 return row[0]
         except Exception:
             logger.exception("Cache L2 read error for key: %s", key)
 
         return None
 
-    async def setex(self, key: str, seconds: int, value: str) -> bool:
+    async def is_stale(self, key: str) -> bool:
+        """Return True if the entry exists but its stale_at has passed."""
         await self._ensure_init()
-        expires_at = time.time() + seconds
+        now = time.time()
 
-        self._l1[key] = (value, expires_at)
+        entry = self._l1.get(key)
+        if entry is not None:
+            _, exp, stale_at = entry
+            return exp > now and stale_at <= now
+
+        try:
+            db = await self._get_db()
+            cursor = await db.execute(
+                "SELECT stale_at FROM cache WHERE key = ? AND expires_at > ?",
+                (key, now),
+            )
+            row = await cursor.fetchone()
+            if row:
+                return row[0] <= now
+        except Exception:
+            logger.exception("Cache stale check error for key: %s", key)
+
+        return False
+
+    async def setex(
+        self,
+        key: str,
+        seconds: int,
+        value: str,
+        stale_seconds: int = _DEFAULT_STALE_SECONDS,
+    ) -> bool:
+        """Store value permanently; stale_seconds controls when revalidation fires."""
+        await self._ensure_init()
+        now = time.time()
+        expires_at = FAR_FUTURE  # never evict
+        stale_at = now + stale_seconds
+
+        self._l1[key] = (value, expires_at, stale_at)
 
         try:
             db = await self._get_db()
             await db.execute(
-                "INSERT OR REPLACE INTO cache (key, value, expires_at) "
-                "VALUES (?, ?, ?)",
-                (key, value, expires_at),
+                "INSERT OR REPLACE INTO cache (key, value, expires_at, stale_at) "
+                "VALUES (?, ?, ?, ?)",
+                (key, value, expires_at, stale_at),
             )
             await db.commit()
         except Exception:
@@ -144,18 +189,14 @@ class PersistentCache:
 
         return True
 
-    # ------------------------------------------------------------------
-    # Lifecycle helpers (called from app lifespan)
-    # ------------------------------------------------------------------
-
     async def start_cleanup(self, interval: int = 300) -> None:
-        """Begin periodic pruning of expired entries."""
+        """Periodic pruning — only removes entries explicitly marked for deletion
+        (expires_at well below FAR_FUTURE).  Normal entries are never pruned."""
         await self._ensure_init()
         if self._cleanup_task is not None:
             return
 
         async def _loop() -> None:
-            # Jitter initial sleep so workers don't all prune simultaneously.
             jitter = (os.getpid() % 60) * 5
             await asyncio.sleep(jitter)
             while True:
@@ -188,23 +229,29 @@ class PersistentCache:
     async def _prune(self) -> None:
         import sqlite3
 
+        # Only prune entries explicitly set to expire (not FAR_FUTURE ones).
+        cutoff = FAR_FUTURE - 1
         now = time.time()
-        expired = [k for k, (_, exp) in self._l1.items() if exp <= now]
+        expired = [
+            k for k, (_, exp, _s) in self._l1.items()
+            if exp < cutoff and exp <= now
+        ]
         for k in expired:
             del self._l1[k]
 
         try:
             db = await self._get_db()
-            await db.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
+            await db.execute(
+                "DELETE FROM cache WHERE expires_at < ? AND expires_at <= ?",
+                (cutoff, now),
+            )
             await db.commit()
         except sqlite3.OperationalError:
-            # Another worker holds a write lock — prune is best-effort, skip.
             pass
         except Exception:
             logger.exception("Cache L2 prune error")
 
     async def clear(self) -> None:
-        """Wipe both tiers entirely."""
         self._l1.clear()
         try:
             db = await self._get_db()

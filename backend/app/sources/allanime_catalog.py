@@ -198,7 +198,7 @@ class AllanimeCatalogAdapter:
             timeout=settings.http_timeout_seconds,
         )
 
-    @cache_response(ttl_seconds=3600, response_model=ShowSummaryModel)
+    @cache_response(ttl_seconds=315360000, response_model=ShowSummaryModel)
     async def search_shows(
         self,
         query: str,
@@ -257,7 +257,7 @@ class AllanimeCatalogAdapter:
             )
         return results
 
-    @cache_response(ttl_seconds=1800, response_model=ShowSummaryModel)
+    @cache_response(ttl_seconds=315360000, response_model=ShowSummaryModel)
     async def get_popular_shows(
         self,
         limit: int = 20,
@@ -316,7 +316,7 @@ class AllanimeCatalogAdapter:
             )
         return results
 
-    @cache_response(ttl_seconds=3600, response_model=ShowSummaryModel)
+    @cache_response(ttl_seconds=315360000, response_model=ShowSummaryModel)
     async def get_show_details(
         self,
         show_id: str,
@@ -360,7 +360,7 @@ class AllanimeCatalogAdapter:
             type=show.get("type"),
         )
 
-    @cache_response(ttl_seconds=3600, response_model=EpisodeSummaryModel)
+    @cache_response(ttl_seconds=315360000, response_model=EpisodeSummaryModel)
     async def get_episode_list(
         self,
         show_id: str,
@@ -378,7 +378,7 @@ class AllanimeCatalogAdapter:
         numbers = sorted({str(ep) for ep in detail})
         return [EpisodeSummaryModel(number=n) for n in numbers]
 
-    @cache_response(ttl_seconds=900, response_model=StreamCandidateModel)
+    @cache_response(ttl_seconds=315360000, response_model=StreamCandidateModel)
     async def get_stream_candidates(
         self,
         show_id: str,
