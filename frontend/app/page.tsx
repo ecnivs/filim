@@ -84,13 +84,24 @@ export default function HomePage() {
 
     const discoverySections = useMemo(() => {
         const flat = discovery.data?.pages.flatMap((p) => p.sections) ?? [];
-        const seen = new Set<string>();
-        return flat.filter((s) => {
-            const k = s.title.trim().toLowerCase();
-            if (seen.has(k)) return false;
-            seen.add(k);
-            return true;
-        });
+        const seenSections = new Set<string>();
+        const seenItems = new Set<string>();
+        return flat
+            .filter((s) => {
+                const k = s.title.trim().toLowerCase();
+                if (seenSections.has(k)) return false;
+                seenSections.add(k);
+                return true;
+            })
+            .map((s) => ({
+                ...s,
+                items: s.items.filter((item) => {
+                    if (seenItems.has(item.id)) return false;
+                    seenItems.add(item.id);
+                    return true;
+                }),
+            }))
+            .filter((s) => s.items.length > 0);
     }, [discovery.data?.pages]);
 
     const { ref, inView } = useInView({
