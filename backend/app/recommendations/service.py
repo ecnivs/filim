@@ -341,10 +341,16 @@ class RecommendationService:
         results = await asyncio.gather(*coros, return_exceptions=True)
 
         sections: list[RecommendationSectionModel] = []
+        seen_ids: set[str] = set()
         for r in results:
             if isinstance(r, Exception) or r is None:
                 continue
-            sections.append(r)
+            deduped = [item for item in r.items if item.id not in seen_ids]
+            seen_ids.update(item.id for item in deduped)
+            if deduped:
+                sections.append(RecommendationSectionModel(
+                    id=r.id, title=r.title, items=deduped
+                ))
 
         return sections
 
