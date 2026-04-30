@@ -280,7 +280,7 @@ class RecommendationService:
         if not genres or cursor >= len(genres):
             return [], None
 
-        batch_size = min(limit + 2, 7)
+        batch_size = min(limit * 5, 25)
         end = min(cursor + batch_size, len(genres))
         batch = genres[cursor:end]
 
