@@ -54,6 +54,13 @@ body {
   -webkit-user-select: none;
 }
 
+button,
+a,
+[role="button"],
+[role="link"] {
+  touch-action: manipulation;
+}
+
 input,
 textarea,
 select,

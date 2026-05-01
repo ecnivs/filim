@@ -242,7 +242,7 @@ export default function HomePage() {
         if (progress && progress.episode) {
             return `/watch/${featuredShow.id}/${progress.episode}`;
         }
-        return `/show/${featuredShow.id}`;
+        return `/watch/${featuredShow.id}/1`;
     })();
 
     const handleBillboardPlay = (e: React.MouseEvent) => {

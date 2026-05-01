@@ -152,6 +152,9 @@ export function Player({
     const [currentSubtitleId, setCurrentSubtitleId] = useState<number | null>(null);
     const [hasEnded, setHasEnded] = useState(false);
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
+    // Tracks actual playing language when HLS falls back (e.g. episode has no dub).
+    // null means "same as selectedAudioLanguageId".
+    const [hlsActualLanguageId, setHlsActualLanguageId] = useState<string | null>(null);
     const [hlsQualityOptions, setHlsQualityOptions] = useState<QualityOption[]>([]);
     const [hlsQualityValue, setHlsQualityValue] = useState("auto");
     const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -381,12 +384,19 @@ export function Player({
                     if (matchByCode >= 0) {
                         const anyHls = hls as any;
                         anyHls.audioTrack = matchByCode;
+                        setHlsActualLanguageId(null); // playing what was requested
                         return;
                     }
                 }
 
+                // Requested language not in this stream — fall back to track 0.
+                // Update display to reflect what's actually playing without changing user pref.
                 const anyHls = hls as any;
                 anyHls.audioTrack = 0;
+                const fallbackTrack = tracks[0];
+                const fallbackLang = (fallbackTrack?.lang as string | undefined)?.split("-")[0] ?? null;
+                const fallbackEntry = audioLanguages?.find((l) => l.code === fallbackLang || l.id === fallbackLang);
+                setHlsActualLanguageId(fallbackEntry?.id ?? fallbackLang);
             });
         } else {
             video.src = source.url;
@@ -530,6 +540,7 @@ export function Player({
         video.addEventListener("seeked", handleSeeked);
         video.addEventListener("error", handleVideoError);
 
+        const wasAlreadyMuted = video.muted;
         void video
             .play()
             .then(() => setIsPlaying(true))
@@ -541,7 +552,14 @@ export function Player({
                 setIsMuted(true);
                 void video
                     .play()
-                    .then(() => setIsPlaying(true))
+                    .then(() => {
+                        setIsPlaying(true);
+                        // Restore audio if the user wasn't muted before the stream swap.
+                        if (!wasAlreadyMuted) {
+                            video.muted = false;
+                            setIsMuted(false);
+                        }
+                    })
                     .catch(() => {
                         video.muted = false;
                         setIsMuted(false);
@@ -1675,13 +1693,14 @@ export function Player({
                                                 }
                                             ]}
                                             activeIds={[
-                                                `audio-${selectedAudioLanguageId ?? currentLanguageId ?? ""}`,
+                                                `audio-${hlsActualLanguageId ?? selectedAudioLanguageId ?? currentLanguageId ?? ""}`,
                                                 `sub-${currentSubtitleId ?? -1}`
                                             ]}
                                             onSelect={(id) => {
                                                 if (id.startsWith("audio-")) {
                                                     const langId = id.replace("audio-", "");
                                                     setSelectedAudioLanguageId(langId);
+                                                    setHlsActualLanguageId(null);
                                                     onChangeLanguage?.(langId);
                                                 } else if (id.startsWith("sub-")) {
                                                     const subId = Number(id.replace("sub-", ""));

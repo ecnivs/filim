@@ -17,13 +17,8 @@ export function isMobile() {
 }
 
 export function handlePlayWithFullscreen(href: string, router: any) {
+    router.push(href);
     if (isMobile()) {
-        requestFullscreen(document.documentElement).catch(() => {
-            console.warn("Fullscreen request failed");
-        }).finally(() => {
-            router.push(href);
-        });
-    } else {
-        router.push(href);
+        requestFullscreen(document.documentElement).catch(() => {});
     }
 }

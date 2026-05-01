@@ -124,7 +124,9 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                 }
 
                 let streamLanguage = languageRef.current;
-                if (applyServerResume) {
+                // Only read API preference on first-ever load (committed === null).
+                // Episode changes within a session preserve the user's active selection.
+                if (committed === null) {
                     try {
                         const prefRes = await api.get<{ item: { audio_language_id: string } | null }>(
                             "/user/audio-preference"
@@ -290,13 +292,18 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
 
     const handleBack = useCallback(() => router.back(), [router]);
 
+    // Show loading spinner immediately when route changes, before the useEffect fires
+    const hasUncommittedChange =
+        streamCommittedRouteKeyRef.current !== null && streamCommittedRouteKeyRef.current !== routeKey;
+    const isStreamLoading = state.isPageLoading || hasUncommittedChange;
+
     return (
         <main className="h-screen w-screen overflow-hidden bg-black text-white">
             <div className="relative h-full w-full bg-black">
                 {!state.error && (
                     <Player
-                        source={state.manifestUrl ? { url: state.manifestUrl } : undefined}
-                        isStreamLoading={state.isPageLoading}
+                        source={isStreamLoading && hasUncommittedChange ? undefined : (state.manifestUrl ? { url: state.manifestUrl } : undefined)}
+                        isStreamLoading={isStreamLoading}
                         title={showDetails?.title}
                         episodeLabel={episodeLabel}
                         onBack={handleBack}
