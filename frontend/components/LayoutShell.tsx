@@ -66,7 +66,7 @@ function LayoutShellInner({ children }: { children: ReactNode }) {
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [searchQuery, router, searchParams]);
+    }, [searchQuery, router]);
 
     useEffect(() => {
         if (isSearchExpanded) {
