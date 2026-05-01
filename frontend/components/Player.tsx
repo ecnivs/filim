@@ -245,6 +245,8 @@ export function Player({
             setIsBuffering(true);
             setIsPlayerReady(false);
             setIsPlaying(false);
+            setDuration(0);
+            setCurrentTime(0);
             return;
         }
 
@@ -273,6 +275,8 @@ export function Player({
             lastSourceUrlRef.current = source.url;
             lastEpisodeLabelRef.current = episodeLabel;
         };
+
+        const mediaErrorRecoveredRef = { current: false };
 
         if (isHls && Hls.isSupported()) {
             const hls = new Hls({
@@ -308,12 +312,21 @@ export function Player({
             hls.on(Hls.Events.ERROR, (_event, data) => {
                 if (!data.fatal) return;
                 if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                    hls.recoverMediaError();
+                    if (!mediaErrorRecoveredRef.current) {
+                        mediaErrorRecoveredRef.current = true;
+                        hls.recoverMediaError();
+                    } else {
+                        // Recovery failed — bubble up so layout can retry with fresh CDN URL.
+                        setIsBuffering(false);
+                        setIsPlayerReady(true);
+                        setIsPlaying(false);
+                        onErrorRef.current?.(new Error("media_error"));
+                    }
                 } else {
-                    // Fatal network/other error — clear spinner so user isn't stuck.
                     setIsBuffering(false);
                     setIsPlayerReady(true);
                     setIsPlaying(false);
+                    onErrorRef.current?.(new Error("stream_error"));
                 }
             });
 
@@ -521,11 +534,12 @@ export function Player({
             syncBufferingFromElement();
         };
 
-        // Clear the stuck spinner on native video load failure (e.g. 403, bad URL).
+        // Clear stuck spinner on native video load failure (e.g. 403, bad URL) and trigger retry.
         const handleVideoError = () => {
             setIsBuffering(false);
             setIsPlayerReady(true);
             setIsPlaying(false);
+            onErrorRef.current?.(new Error("video_error"));
         };
 
         video.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -591,6 +605,17 @@ export function Player({
     useEffect(() => {
         hasAppliedInitialTime.current = false;
     }, [episodeLabel, source?.url]);
+
+    // Watchdog: if video is playing but duration stays 0 (e.g. manifest parsed but
+    // segments are dead and no HLS error fires), surface an error so layout can retry.
+    useEffect(() => {
+        if (!isPlaying || !isPlayerReady || duration > 0 || !source?.url) return;
+        const timer = window.setTimeout(() => {
+            setIsPlaying(false);
+            onErrorRef.current?.(new Error("stuck_stream"));
+        }, 5000);
+        return () => window.clearTimeout(timer);
+    }, [isPlaying, isPlayerReady, duration, source?.url]);
 
     useEffect(() => {
         if (currentLanguageId) {

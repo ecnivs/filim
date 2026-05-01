@@ -55,7 +55,7 @@ def cache_response(
                         _refreshing_keys.add(key)
                         asyncio.create_task(
                             _background_refresh(
-                                func, args, kwargs, key, stale_seconds
+                                func, args, kwargs, key, stale_seconds, ttl_seconds
                             )
                         )
                     data = json.loads(cached)
@@ -91,12 +91,24 @@ def cache_response(
     return decorator
 
 
+async def bust_cache_entry(func_name: str, key_prefix: str = "filim:cache:v2:", **kwargs: Any) -> None:
+    """Delete a single cache entry by function name + kwargs (mirrors cache_response key generation)."""
+    arg_str = json.dumps([[], kwargs], sort_keys=True, default=str)
+    arg_hash = hashlib.md5(arg_str.encode()).hexdigest()
+    key = f"{key_prefix}{func_name}:{arg_hash}"
+    try:
+        await redis_client.delete(key)
+    except Exception:
+        logging.warning("Cache bust failed for key: %s", key)
+
+
 async def _background_refresh(
     func: Callable,
     args: tuple,
     kwargs: dict,
     key: str,
     stale_seconds: int,
+    ttl_seconds: int = 315360000,
 ) -> None:
     try:
         result = await func(*args, **kwargs)
@@ -105,7 +117,7 @@ async def _background_refresh(
             data_to_cache = jsonable_encoder(result)
             await redis_client.setex(
                 key,
-                315360000,
+                ttl_seconds,
                 json.dumps(data_to_cache),
                 stale_seconds=stale_seconds,
             )

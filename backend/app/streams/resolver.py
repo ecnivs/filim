@@ -79,18 +79,38 @@ async def _probe_url(url: str) -> tuple[str, str, int] | None:
         final_url = str(resp.url)
         ct = resp.headers.get("content-type", "").lower()
         result = (final_url, ct, resp.status_code)
-        if resp.status_code < 400:
-            try:
-                await cache_client.setex(
-                    cache_key,
-                    _PROBE_CACHE_TTL,
-                    json.dumps({"url": final_url, "ct": ct, "status": resp.status_code}),
-                )
-            except Exception:
-                pass
+        try:
+            await cache_client.setex(
+                cache_key,
+                _PROBE_CACHE_TTL,
+                json.dumps({"url": final_url, "ct": ct, "status": resp.status_code}),
+            )
+        except Exception:
+            pass
         return result
     except Exception:
         return None
+
+
+def _to_clock_json_url(url: str) -> str:
+    if "/clock/dr" in url:
+        return url.replace("/clock/dr", "/clock.json")
+    if "/clock" in url and "/clock.json" not in url:
+        return url.replace("/clock", "/clock.json")
+    return url
+
+
+async def clear_clock_cache_for_candidates(candidates: list[StreamCandidateModel]) -> None:
+    """Delete cached clock JSON for candidates, forcing fresh CDN URL resolution on next play."""
+    for candidate in candidates:
+        if "apivtwo/clock" not in candidate.url:
+            continue
+        clock_url = _to_clock_json_url(candidate.url)
+        cache_key = f"filim:clock:{hashlib.md5(clock_url.encode()).hexdigest()}"
+        try:
+            await cache_client.delete(cache_key)
+        except Exception:
+            pass
 
 
 class StreamResolver:
@@ -150,11 +170,7 @@ class StreamResolver:
         url = candidate.url
 
         if "apivtwo/clock" in url:
-            clock_url = url
-            if "/clock/dr" in clock_url:
-                clock_url = clock_url.replace("/clock/dr", "/clock.json")
-            elif "/clock" in clock_url and "/clock.json" not in clock_url:
-                clock_url = clock_url.replace("/clock", "/clock.json")
+            clock_url = _to_clock_json_url(url)
 
             data = await self._fetch_clock_json(clock_url)
             links = data.get("links") or []
@@ -209,6 +225,7 @@ class StreamResolver:
 
         cmd = [self.yt_dlp_binary, "-g", "-f", format_selector, url]
 
+        proc = None
         try:
             async with self._semaphore:
                 proc = await asyncio.create_subprocess_exec(
@@ -216,13 +233,22 @@ class StreamResolver:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
-        except asyncio.TimeoutExpired as exc:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-            raise StreamResolverError(f"yt-dlp resolution timed out: {exc}") from exc
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+                except asyncio.TimeoutError as exc:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    raise StreamResolverError(f"yt-dlp resolution timed out for: {url}") from exc
+                except asyncio.CancelledError:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    raise
+        except (StreamResolverError, asyncio.CancelledError):
+            raise
         except (OSError, Exception) as exc:
             raise StreamResolverError(
                 f"yt-dlp failed to start or error occurred: {exc}"

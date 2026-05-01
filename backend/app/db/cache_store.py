@@ -251,6 +251,16 @@ class PersistentCache:
         except Exception:
             logger.exception("Cache L2 prune error")
 
+    async def delete(self, key: str) -> None:
+        await self._ensure_init()
+        self._l1.pop(key, None)
+        try:
+            db = await self._get_db()
+            await db.execute("DELETE FROM cache WHERE key = ?", (key,))
+            await db.commit()
+        except Exception:
+            logger.exception("Cache L2 delete error for key: %s", key)
+
     async def clear(self) -> None:
         self._l1.clear()
         try:

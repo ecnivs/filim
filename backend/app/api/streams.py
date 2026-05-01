@@ -207,6 +207,7 @@ async def get_episode_stream(
         description="Preferred stream variant id from the API list (e.g. v0, v1).",
         pattern="^v[0-9]+$",
     ),
+    refresh: bool = Query(False, description="Bust clock cache and re-resolve CDN URLs."),
     device_token: Optional[str] = Query(None),
     request: Request = None,
     db: AsyncSession = Depends(get_db),
@@ -229,6 +230,7 @@ async def get_episode_stream(
             preferred_quality=quality,
             device_token=device_token,
             variant_id=variant,
+            force_refresh=refresh,
         )
     except RuntimeError as exc:
         raise HTTPException(

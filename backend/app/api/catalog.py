@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,6 +9,7 @@ from app.catalog import CatalogService
 from app.core.utils import proxy_img_url as _proxy_img
 from app.db.session import get_db
 from app.sources import EpisodeSummaryModel
+from app.streams.service import bust_show_stream_cache
 
 
 class ShowSummaryResponse(BaseModel):
@@ -148,6 +150,15 @@ async def get_show_details(
 
     if (not details.title and details.episode_count == 0) and not episodes:
         raise HTTPException(status_code=404, detail="Show not found")
+
+    # Proactively refresh stream cache for first + last episode so CDN URLs are
+    # warm before the user hits play.
+    if episodes:
+        ep_nums = {episodes[0].number}
+        if len(episodes) > 1:
+            ep_nums.add(episodes[-1].number)
+        for ep in ep_nums:
+            asyncio.create_task(bust_show_stream_cache(show_id, ep))
 
     return ShowDetailsResponse(
         id=details.id,

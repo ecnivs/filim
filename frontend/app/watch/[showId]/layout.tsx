@@ -42,6 +42,9 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     // Incremented only on user-initiated language changes; avoids re-triggering fetchStream
     // when fetchStream itself calls setLanguage after reading the audio preference.
     const [languageTrigger, setLanguageTrigger] = useState(0);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const refreshAttemptedRef = useRef(false);
+    const pendingRefreshRef = useRef(false);
     const [selectedQualityId, setSelectedQualityId] = useState<string | null>(null);
     const [showDetails, setShowDetails] = useState<WatchShowDetails | null>(null);
     const [seasons, setSeasons] = useState<{ id: string; title: string }[]>([]);
@@ -66,6 +69,11 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     }, [selectedQualityId, state.variants]);
 
     useEffect(() => {
+        refreshAttemptedRef.current = false;
+        pendingRefreshRef.current = false;
+    }, [routeKey]);
+
+    useEffect(() => {
         if (!routeIds || !routeKey) return;
 
         const ids = routeIds;
@@ -84,10 +92,13 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
         let cancelled = false;
 
         async function fetchStream() {
+            const isRefresh = pendingRefreshRef.current;
+            pendingRefreshRef.current = false;
+
             setEpisodeData({
                 isPageLoading: true,
                 error: null,
-                ...(isEpisodeChange
+                ...(isEpisodeChange || isRefresh
                     ? {
                         manifestUrl: null,
                         variants: [],
@@ -153,7 +164,8 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                     params: {
                         language: streamLanguage,
                         ...(qualityParam ? { quality: qualityParam } : {}),
-                        ...(variantParam ? { variant: variantParam } : {})
+                        ...(variantParam ? { variant: variantParam } : {}),
+                        ...(isRefresh ? { refresh: true } : {})
                     }
                 });
 
@@ -170,12 +182,18 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                 }
             } catch (err: unknown) {
                 if (!cancelled) {
-                    const message =
-                        err instanceof Error ? err.message : "Episode unavailable.";
-                    setEpisodeData({
-                        error: message,
-                        isPageLoading: false
-                    });
+                    if (!refreshAttemptedRef.current) {
+                        refreshAttemptedRef.current = true;
+                        pendingRefreshRef.current = true;
+                        setRefreshTrigger(t => t + 1);
+                    } else {
+                        const message =
+                            err instanceof Error ? err.message : "Episode unavailable.";
+                        setEpisodeData({
+                            error: message,
+                            isPageLoading: false
+                        });
+                    }
                 }
             }
         }
@@ -185,7 +203,7 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [routeKey, routeIds, languageTrigger, qualityHint, selectedQualityId, setEpisodeData]);
+    }, [routeKey, routeIds, languageTrigger, qualityHint, selectedQualityId, setEpisodeData, refreshTrigger]);
 
     useEffect(() => {
         let cancelled = false;
@@ -256,9 +274,17 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
     }, [showDetails]);
 
     const handleChangeLanguage = useCallback((nextId: string) => {
+        refreshAttemptedRef.current = false;
+        pendingRefreshRef.current = false;
         setLanguage(nextId);
         setLanguageTrigger(t => t + 1);
         api.post("/user/audio-preference", { audio_language_id: nextId }).catch(() => { });
+    }, []);
+
+    const handleChangeQuality = useCallback((qualityId: string | null) => {
+        refreshAttemptedRef.current = false;
+        pendingRefreshRef.current = false;
+        setSelectedQualityId(qualityId);
     }, []);
 
     const stableQualityOptions = useMemo(
@@ -292,6 +318,16 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
 
     const handleBack = useCallback(() => router.back(), [router]);
 
+    const handlePlayerError = useCallback(() => {
+        if (refreshAttemptedRef.current) {
+            setEpisodeData({ error: "Stream unavailable. Try a different source or episode.", isPageLoading: false });
+            return;
+        }
+        refreshAttemptedRef.current = true;
+        pendingRefreshRef.current = true;
+        setRefreshTrigger(t => t + 1);
+    }, [setEpisodeData]);
+
     // Show loading spinner immediately when route changes, before the useEffect fires
     const hasUncommittedChange =
         streamCommittedRouteKeyRef.current !== null && streamCommittedRouteKeyRef.current !== routeKey;
@@ -315,12 +351,13 @@ function WatchLayoutInner({ children }: { children: React.ReactNode }) {
                         onChangeLanguage={handleChangeLanguage}
                         initialTimeSeconds={state.resumePositionSeconds ?? undefined}
                         onProgress={handleProgress}
+                        onError={handlePlayerError}
                         introEndSeconds={episodeMeta?.duration_seconds && episodeMeta.duration_seconds > 900 ? 90 : undefined}
                         nextEpisodeHref={nextEpisodeHref}
                         nextEpisodeLabel={nextEpisodeLabel}
                         qualityOptions={stableQualityOptions}
                         currentQualityId={selectedQualityId ?? "auto"}
-                        onChangeQuality={setSelectedQualityId}
+                        onChangeQuality={handleChangeQuality}
                         showId={showDetails?.id || routeIds?.showId}
                         progressEpisodeKey={routeIds?.episode}
                         episodes={showDetails?.episodes || []}

@@ -5,8 +5,9 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.core.cache import bust_cache_entry
 from app.sources import AllanimeCatalogAdapter, StreamCandidateModel, get_catalog_adapter
-from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverError
+from app.streams.resolver import ResolvedStream, StreamResolver, StreamResolverError, clear_clock_cache_for_candidates
 
 _PARALLEL_CANDIDATES = 3  # race this many candidates concurrently
 
@@ -52,6 +53,33 @@ async def _resolve_first(
     return None, None
 
 
+async def bust_show_stream_cache(show_id: str, episode: str) -> None:
+    """Background task: bust clock + candidates cache for one episode (both modes).
+
+    Called proactively when a show detail page is viewed so CDN URLs are fresh
+    before the user hits play.
+    """
+    adapter = get_catalog_adapter()
+    for mode in ("sub", "dub"):
+        try:
+            candidates = await adapter.get_stream_candidates(
+                show_id=show_id, episode=episode, mode=mode
+            )
+            if candidates:
+                await asyncio.gather(
+                    clear_clock_cache_for_candidates(candidates),
+                    bust_cache_entry(
+                        "get_stream_candidates",
+                        show_id=show_id,
+                        episode=episode,
+                        mode=mode,
+                    ),
+                    return_exceptions=True,
+                )
+        except Exception:
+            pass
+
+
 class StreamService:
     def __init__(self, source: AllanimeCatalogAdapter | None = None) -> None:
         self.source = source or get_catalog_adapter()
@@ -65,9 +93,9 @@ class StreamService:
         preferred_quality: Optional[str],
         device_token: Optional[str],
         variant_id: Optional[str] = None,
+        force_refresh: bool = False,
     ) -> tuple[str, list[StreamVariantModel]]:
-        # Stream candidates are cached upstream (900 s). Resolved URLs (CDN/wixmp)
-        # expire on their own schedule — don't cache them here or stale URLs break playback.
+        # Stream candidates served from cache; resolved CDN URLs expire on their own schedule.
         candidates = await self.source.get_stream_candidates(
             show_id=show_id,
             episode=episode,
@@ -76,6 +104,22 @@ class StreamService:
 
         if not candidates:
             raise RuntimeError("No stream candidates available")
+
+        if force_refresh:
+            # Bust clock JSON (expired CDN URLs) and candidates (stale direct URLs) in parallel.
+            await asyncio.gather(
+                clear_clock_cache_for_candidates(candidates),
+                bust_cache_entry("get_stream_candidates", show_id=show_id, episode=episode, mode=mode),
+                return_exceptions=True,
+            )
+            # Re-fetch candidates fresh after busting.
+            candidates = await self.source.get_stream_candidates(
+                show_id=show_id,
+                episode=episode,
+                mode=mode,
+            )
+            if not candidates:
+                raise RuntimeError("No stream candidates available")
 
         # Candidates are already sorted by API priority (descending) from the source.
         def provider_rank(c: StreamCandidateModel) -> float:
