@@ -1241,13 +1241,13 @@ export function Player({
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .landscape-fallback {
-                    width: 100vh !important;
-                    height: 100vw !important;
-                    transform: rotate(90deg) translate(100%, 0) !important;
-                    transform-origin: top right !important;
                     position: fixed !important;
                     top: 0 !important;
-                    right: 100% !important;
+                    left: 0 !important;
+                    width: 100vh !important;
+                    height: 100vw !important;
+                    transform-origin: top left !important;
+                    transform: translateY(-100%) rotate(90deg) !important;
                     overflow: hidden !important;
                 }
             `}} />
@@ -1337,7 +1337,7 @@ export function Player({
                     leaveFrom="opacity-100 translate-y-0"
                     leaveTo="opacity-0 -translate-y-4"
                 >
-                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-3 sm:px-12 pt-4 sm:pt-8 text-sm">
+                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-0 sm:px-12 pt-1 lg:pt-8 text-sm">
                         <div className="flex items-start gap-3 sm:gap-6">
                             <button
                                 onClick={(e) => {
@@ -1510,7 +1510,7 @@ export function Player({
                     leaveTo="opacity-0 translate-y-8"
                 >
                     <div
-                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-3 pb-[max(20px,env(safe-area-inset-bottom))] pt-3 sm:px-12 sm:pb-12 sm:pt-2"
+                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-0 sm:px-12 pb-[max(4px,env(safe-area-inset-bottom))] pt-1 lg:pb-12 lg:pt-2"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="space-y-2 sm:space-y-6">
@@ -1549,7 +1549,7 @@ export function Player({
                             </div>
 
                             <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full">
-                                <div className="flex items-center gap-1 sm:gap-6 justify-start">
+                                <div className="flex items-center gap-4 sm:gap-6 justify-start">
                                     <button
                                         type="button"
                                         onClick={togglePlay}
@@ -1563,7 +1563,7 @@ export function Player({
                                         )}
                                     </button>
 
-                                    <div className="flex items-center gap-2 sm:gap-4">
+                                    <div className="flex items-center gap-3 sm:gap-4">
                                         <button
                                             type="button"
                                             onClick={() => seekRelative(-10)}
@@ -1623,7 +1623,7 @@ export function Player({
                                 </div>
 
                                 <div
-                                    className="flex items-center gap-2 sm:gap-5 justify-end"
+                                    className="flex items-center gap-4 sm:gap-5 justify-end"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     {!isMovie && (
