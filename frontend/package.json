@@ -14,6 +14,7 @@
         "@tanstack/query-sync-storage-persister": "^5.100.6",
         "@tanstack/react-query": "^5.32.0",
         "@tanstack/react-query-persist-client": "^5.100.6",
+        "framer-motion": "^12.38.0",
         "hls.js": "^1.5.15",
         "lucide-react": "^0.577.0",
         "next": "14.2.3",
