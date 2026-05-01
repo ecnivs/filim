@@ -1018,11 +1018,25 @@ export function Player({
         const video = videoRef.current;
         if (!video) return;
         if (video.paused) {
+            const wasMuted = video.muted;
             void video.play().then(() => {
                 setIsPlaying(true);
                 void enforceMobileFullscreen();
             }).catch(() => {
-                setIsPlaying(false);
+                video.muted = true;
+                setIsMuted(true);
+                void video.play().then(() => {
+                    setIsPlaying(true);
+                    void enforceMobileFullscreen();
+                    if (!wasMuted) {
+                        video.muted = false;
+                        setIsMuted(false);
+                    }
+                }).catch(() => {
+                    video.muted = wasMuted;
+                    setIsMuted(wasMuted);
+                    setIsPlaying(false);
+                });
             });
         } else {
             video.pause();
@@ -1305,7 +1319,7 @@ export function Player({
             >
                 <video
                     ref={videoRef}
-                    className="pointer-events-none h-full w-full bg-black object-contain"
+                    className="pointer-events-none absolute inset-0 h-full w-full bg-black object-cover sm:object-contain"
                     playsInline
                     preload="auto"
                     controls={false}
@@ -1337,7 +1351,7 @@ export function Player({
                     leaveFrom="opacity-100 translate-y-0"
                     leaveTo="opacity-0 -translate-y-4"
                 >
-                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-0 sm:px-12 pt-1 lg:pt-8 text-sm">
+                    <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-3 sm:px-12 pt-[max(4px,env(safe-area-inset-top))] lg:pt-8 text-sm">
                         <div className="flex items-start gap-3 sm:gap-6">
                             <button
                                 onClick={(e) => {
@@ -1510,7 +1524,7 @@ export function Player({
                     leaveTo="opacity-0 translate-y-8"
                 >
                     <div
-                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-0 sm:px-12 pb-[max(4px,env(safe-area-inset-bottom))] pt-1 lg:pb-12 lg:pt-2"
+                        className="pointer-events-auto absolute inset-x-0 bottom-0 px-3 sm:px-12 pb-[max(4px,env(safe-area-inset-bottom))] pt-1 lg:pb-12 lg:pt-2"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="space-y-2 sm:space-y-6">
@@ -1612,14 +1626,9 @@ export function Player({
                                 </div>
 
                                 <div className="flex flex-col items-center justify-center text-center px-2 sm:px-4 overflow-hidden">
-                                    <div className="flex flex-col items-center justify-center text-center gap-0.5 sm:gap-1">
-                                        <span className="text-[8px] sm:text-xs font-bold text-neutral-400 uppercase tracking-[0.15em] opacity-80 hidden sm:block">
-                                            {title}
-                                        </span>
-                                        <span className="text-[10px] sm:text-sm font-semibold text-white tracking-wide truncate max-w-[120px] sm:max-w-xl">
-                                            {episodeLabel}
-                                        </span>
-                                    </div>
+                                    <span className="text-[10px] sm:text-xs font-bold text-white uppercase tracking-[0.15em] truncate max-w-[120px] sm:max-w-xl">
+                                        {episodeLabel}
+                                    </span>
                                 </div>
 
                                 <div

@@ -7,7 +7,6 @@ import { useRouter, usePathname } from "next/navigation";
 export default function ShowDetailModal({ params }: { params: { id: string } }) {
     const router = useRouter();
     const pathname = usePathname();
-
     const isVisible = pathname === `/show/${params.id}`;
 
     return (

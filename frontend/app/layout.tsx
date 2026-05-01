@@ -1,8 +1,12 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ReactNode } from "react";
 import { LayoutShell } from "@/components/LayoutShell";
 import { ClientProviders } from "@/components/ClientProviders";
+
+export const viewport: Viewport = {
+    viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
     title: {
