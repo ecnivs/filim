@@ -22,13 +22,13 @@ Filim is a self-hosted **Next.js** frontend and **FastAPI** backend for browsing
 >
 > **Copyright and DMCA:** Claims about infringing material should be directed to the sites or providers that actually host or deliver the content, not to this repository as a substitute. Tools in this space (for example [ani-cli](https://github.com/pystardust/ani-cli)) document that notices for similar integrations may belong with providers such as [allanime.to](https://allanime.to). Please do not use GitHub issues to harass maintainers about third-party media.
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 - Python 3.x (tested with Python 3.13)
 - `uv` (Python package manager)
 - `Node.js`
 
-## 📦 Installation
+## Installation
 
 1. **Clone the repository**
 
@@ -51,7 +51,7 @@ cd ../frontend
 npm install
 ```
 
-## 🚀 Running Filim
+## Running Filim
 
 **Start the API** (leave this terminal open):
 
@@ -67,7 +67,7 @@ cd frontend
 npm run dev
 ```
 
-## 🙌 Contributing
+## Contributing
 Feel free to:
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
